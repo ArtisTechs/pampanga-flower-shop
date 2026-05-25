@@ -9,6 +9,34 @@ html { scroll-padding-top: 82px; }
 body { font-family: "Inter", sans-serif; background: #f9eeee; color: #1d1518; }
 a { color: inherit; }
 .main-content { padding-top: 56px; }
+.site-footer {
+  border-top: 1px solid #f0d5d5;
+  background: #fff4f3;
+}
+.site-footer-inner {
+  width: min(1200px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.2rem 0 1.35rem;
+  display: grid;
+  gap: 0.35rem;
+  justify-items: center;
+  text-align: center;
+}
+.site-footer-brand {
+  color: #d93d88;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+.site-footer-copy {
+  color: #5e4f52;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+.site-footer-meta {
+  color: #8a7679;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
 section { scroll-margin-top: 82px; }
 .reveal-on-scroll {
   --reveal-delay: 0ms;

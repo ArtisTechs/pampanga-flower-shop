@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import { useEffect, useMemo, useState } from "react";
 import { AppToast, type ToastMessage, type ToastTone } from "./components/AppToast";
 import { LoginOverlay } from "./components/LoginOverlay";
+import { SiteFooter } from "./components/SiteFooter";
 import { SiteHeader } from "./components/SiteHeader";
 import { navItems } from "./data/homeData";
 import { useAuth } from "./hooks/useAuth";
@@ -217,6 +218,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+      <SiteFooter />
       <AppToast toast={toast} />
     </>
   );
