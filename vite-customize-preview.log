@@ -1,0 +1,41 @@
+
+> pampanga-flower-shop@1.0.0 dev
+> vite --host 127.0.0.1
+
+Port 5173 is in use, trying another one...
+Port 5174 is in use, trying another one...
+Port 5175 is in use, trying another one...
+Port 5176 is in use, trying ano[2m11:08:21 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/CustomizeOrderPage.tsx[22m
+[2m11:08:28 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:09:26 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/admin/AdminLayout.tsx[22m
+[2m11:09:37 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:11:36 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/admin/AdminLayout.tsx[22m
+[2m11:11:44 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[2m11:13:34 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:13:55 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/CustomizeOrderPage.tsx[22m
+[2m11:14:22 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:15:22 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/admin/AdminLayout.tsx[22m
+[2m11:15:27 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/CustomizeOrderPage.tsx[22m
+[2m11:15:27 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[2m11:15:50 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/HomePage.tsx[22m
+[2m11:16:01 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:16:02 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/HomePage.tsx[22m
+[2m11:16:11 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:16:50 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:17:10 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:18:35 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/admin/AdminLayout.tsx[22m
+[2m11:18:44 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[2m11:19:45 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:19:55 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/admin/AdminLayout.tsx[22m
+[2m11:20:15 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/HomePage.tsx[22m
+[2m11:20:25 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:20:45 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/HomePage.tsx[22m
+[2m11:20:59 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[2m11:21:35 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/AdminWebsiteContentPage.tsx[22m
+[2m11:21:44 AM[22m [36m[1m[vite][22m[39m [32mhmr [2m11:21:44 AM[22m [36m[1m[vite][22m[3[2m11:22:00 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/admin/AdminLayout.tsx[22m
+[2m11:22:46 AM[22m [36m[1m[vite][22m[39m [32mhmr [2m11:22:46 AM[22m [36m[1m[vite][22m[39m [32mhmr upd[2m11:23:01 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:23:41 AM[22m [36m[1m[vite][22m[39m [32mhmr [2m11:23:41 AM[22m [36m[1m[vite][22m[39m [32mhmr upd[2m11:23:43 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:24:31 AM[22m [36m[1m[vite][22m[39m [32mhmr [2m11:24:31 AM[22m [36m[1m[vite][22m[39m [32m[2m11:24:36 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/global.css[22m
+[2m11:32:14 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/CustomizeOrderPage.tsx[22m
+[2m11:32:16 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/CustomizeOrderPage.tsx[22m
+[2m11:32:16 AM[22m [36m[1m[vite][22m[39m [32mhmr [2m11:32:16 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/CustomizeOrderPage.tsx[22m
