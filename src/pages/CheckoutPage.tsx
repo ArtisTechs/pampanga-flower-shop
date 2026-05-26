@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import type { CSSProperties } from "react";
+import { siteImage } from "../data/imagePaths";
 import type { CartItem, MockAccount } from "../types/shop";
 import { formatPhpCurrency } from "../utils/currency";
 
@@ -43,7 +45,12 @@ export const CheckoutPage = ({ account, items, onConfirmOrder }: CheckoutPagePro
 
   if (orderItems.length === 0) {
     return (
-      <section className="checkout-page">
+      <section
+        className="checkout-page"
+        style={{
+          "--checkout-page-image": `url("${siteImage("background.jpg")}")`
+        } as CSSProperties}
+      >
         <div className="catalog-empty-state checkout-empty-state" role="status">
           <h2>No order to review</h2>
           <p>Add bouquets to your cart before checking out.</p>
@@ -56,7 +63,13 @@ export const CheckoutPage = ({ account, items, onConfirmOrder }: CheckoutPagePro
   }
 
   return (
-    <section className="checkout-page" aria-labelledby="checkout-title">
+    <section
+      className="checkout-page"
+      aria-labelledby="checkout-title"
+      style={{
+        "--checkout-page-image": `url("${siteImage("background.jpg")}")`
+      } as CSSProperties}
+    >
       <header className="checkout-header">
         <h1 id="checkout-title">Order Summary</h1>
         <p>Review your bouquet before confirming</p>

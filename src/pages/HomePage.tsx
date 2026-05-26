@@ -1,6 +1,7 @@
 import { useEffect, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { features, flowerTypeCards, occasionCards, reviews } from "../data/homeData";
+import { siteImage } from "../data/imagePaths";
 
 interface HomePageProps {
   isLoggedIn: boolean;
@@ -138,7 +139,12 @@ export const HomePage = ({ isLoggedIn, onRequireLogin }: HomePageProps) => {
       </section>
 
       <section id="philosophy" className="philosophy-section" aria-labelledby="philosophy-title">
-        <div className="philosophy-hero">
+        <div
+          className="philosophy-hero"
+          style={{
+            "--philosophy-hero-image": `url("${siteImage("philosophy.png")}")`
+          } as CSSProperties}
+        >
           <div className="philosophy-hero-copy reveal-on-scroll">
             <h2>
               <span>Flowers that feel</span>

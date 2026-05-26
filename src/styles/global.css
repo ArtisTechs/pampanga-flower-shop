@@ -388,7 +388,7 @@ section { scroll-margin-top: 82px; }
 .feature-card p { max-width: 330px; color: #111; font-size: 1.08rem; line-height: 1.48; }
 
 .philosophy-section { overflow: hidden; background: #faeeee; }
-.philosophy-hero { min-height: clamp(230px, 32vw, 320px); display: flex; align-items: center; background: linear-gradient(90deg, rgba(16, 25, 25, 0.78), rgba(16, 25, 25, 0.42) 48%, rgba(16, 25, 25, 0.2)), url("/images/site/philosophy.png") center 36% / cover no-repeat; }
+.philosophy-hero { min-height: clamp(230px, 32vw, 320px); display: flex; align-items: center; background: linear-gradient(90deg, rgba(16, 25, 25, 0.78), rgba(16, 25, 25, 0.42) 48%, rgba(16, 25, 25, 0.2)), var(--philosophy-hero-image) center 36% / cover no-repeat; }
 .philosophy-hero-copy { width: min(1200px, calc(100% - 2rem)); margin: 0 auto; color: #fff; text-shadow: 0 2px 7px rgba(0, 0, 0, 0.55); }
 .philosophy-hero-copy h2 { font-family: "Baskervville", serif; font-size: clamp(2.6rem, 6vw, 4.65rem); font-weight: 400; line-height: 0.96; letter-spacing: 0; }
 .philosophy-hero-copy h2 span,
@@ -677,7 +677,7 @@ section { scroll-margin-top: 82px; }
   inset: 0 0 0 auto;
   width: min(390px, 42vw);
   pointer-events: none;
-  background: url("/images/site/background.jpg") right center / cover no-repeat;
+  background: var(--checkout-page-image) right center / cover no-repeat;
   opacity: 0.28;
 }
 .checkout-header {

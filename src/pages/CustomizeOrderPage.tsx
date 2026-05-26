@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import type { ToastTone } from "../components/AppToast";
 import type { ProductItem } from "../types/shop";
+import { publicAssetPath } from "../utils/assets";
 import { formatPhpCurrency } from "../utils/currency";
 
 type BouquetSizeId = "small" | "medium" | "large";
@@ -61,7 +62,7 @@ const ribbons: Array<{ id: RibbonId; label: string }> = [
   { id: "twine", label: "Twine" }
 ];
 
-const previewOptionsByFlowerCount: Record<number, PreviewOption[]> = {
+const rawPreviewOptionsByFlowerCount: Record<number, PreviewOption[]> = {
   1: [
     {
       image: "/images/customize-previews/1-flower/single-blush-rose-transparent-wrap-peach-ribbon.webp",
@@ -248,6 +249,16 @@ const previewOptionsByFlowerCount: Record<number, PreviewOption[]> = {
     }
   ]
 };
+
+const previewOptionsByFlowerCount = Object.fromEntries(
+  Object.entries(rawPreviewOptionsByFlowerCount).map(([flowerCount, options]) => [
+    flowerCount,
+    options.map((option) => ({
+      ...option,
+      image: publicAssetPath(option.image)
+    }))
+  ])
+) as Record<number, PreviewOption[]>;
 
 const choiceFrom = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 const maxFlowerCount = 5;
