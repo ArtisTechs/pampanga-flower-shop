@@ -23,3 +23,8 @@ Thumbs.db
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Private Claude Code skills and local instructions
+.claude/skills/
+.claude/settings.local.json
+CLAUDE.local.md

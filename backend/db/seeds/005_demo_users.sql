@@ -1,0 +1,42 @@
+-- DEMO accounts for local development only. Passwords are public (admin: admin123, customers: user123);
+-- change the admin password or skip this file on any shared or production database.
+-- Hashes use the scrypt format from backend/src/auth/password.ts.
+-- INSERT IGNORE: only adds missing rows, so admin edits to these users are kept on re-seed.
+
+INSERT IGNORE INTO users (id, role, full_name, email, password_hash, contact_number, status, tier) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'admin', 'Joe Keery', 'admin@pampangaflowershop.com',
+    'scrypt$16384$8$1$2FNHCmoqXlWq5LUPTB5J8Q==$MMLbQB622IsqsagVAB/1XCj1veLtwpz+y3jephczMUICMA3mGv2A/K0q7W2Vkmfiyn19/+EQR24u6JkHxv5eHA==',
+    '0917 555 0101', 'Active', 'Customer'),
+  ('00000000-0000-4000-8000-000000000101', 'user', 'Maria Santos', 'maria.santos@example.com',
+    'scrypt$16384$8$1$Pzek4riN7E0OIrjqYxfshA==$QmCEZNh1Jo1G5UMC2km+pguAFsd3HUcx6wGv3wm51WFQLpbZPCOI8kFmpAWDe16lCk49cSDZxEPk9qGHKpJNDg==',
+    '0917 555 0124', 'Active', 'Customer'),
+  ('00000000-0000-4000-8000-000000000102', 'user', 'Juan Dela Cruz', 'juan.delacruz@example.com',
+    'scrypt$16384$8$1$MOC+v+MV/UN45bkapS4BzQ==$P9SHfDBhqrBaLdhCmzZRXaKwtu3IR1XKMfOz6TzWQRw3bT+VZXYvsf8crfgO0KmCEkohv7ec/6+qpydZB5Cy7w==',
+    '0918 555 0188', 'Active', 'Customer'),
+  ('00000000-0000-4000-8000-000000000103', 'user', 'Ralph Manalang', 'ralph.manalang@example.com',
+    'scrypt$16384$8$1$XDupEyWwb4hXq0zn/GXWYQ==$hhDjP9PjSbWJ09gtd+qkKhNYLXtj+4mGeKSdNAdLRL89YA+vJ9pQ/bW/khZ5O8Bz8H7afi9YP4wetWX6soPGTQ==',
+    '0920 555 0166', 'Active', 'Customer'),
+  ('00000000-0000-4000-8000-000000000104', 'user', 'Zaab Roque', 'zaab.roque@gmail.com',
+    'scrypt$16384$8$1$Pzek4riN7E0OIrjqYxfshA==$QmCEZNh1Jo1G5UMC2km+pguAFsd3HUcx6wGv3wm51WFQLpbZPCOI8kFmpAWDe16lCk49cSDZxEPk9qGHKpJNDg==',
+    '09171234001', 'Active', 'Customer'),
+  ('00000000-0000-4000-8000-000000000105', 'user', 'Ralph Diaz', 'ralph.diaz@gmail.com',
+    'scrypt$16384$8$1$Pzek4riN7E0OIrjqYxfshA==$QmCEZNh1Jo1G5UMC2km+pguAFsd3HUcx6wGv3wm51WFQLpbZPCOI8kFmpAWDe16lCk49cSDZxEPk9qGHKpJNDg==',
+    '09171234002', 'Active', 'VIP'),
+  ('00000000-0000-4000-8000-000000000106', 'user', 'Liana Paule', 'liana.paule@gmail.com',
+    'scrypt$16384$8$1$Pzek4riN7E0OIrjqYxfshA==$QmCEZNh1Jo1G5UMC2km+pguAFsd3HUcx6wGv3wm51WFQLpbZPCOI8kFmpAWDe16lCk49cSDZxEPk9qGHKpJNDg==',
+    '09171234003', 'Active', 'Customer'),
+  ('00000000-0000-4000-8000-000000000107', 'user', 'Acy Cayanan', 'acy.cayanan@gmail.com',
+    'scrypt$16384$8$1$Pzek4riN7E0OIrjqYxfshA==$QmCEZNh1Jo1G5UMC2km+pguAFsd3HUcx6wGv3wm51WFQLpbZPCOI8kFmpAWDe16lCk49cSDZxEPk9qGHKpJNDg==',
+    '09171234004', 'Disabled', 'Customer'),
+  ('00000000-0000-4000-8000-000000000108', 'user', 'Angelica Mendoza', 'angelica.mendoza@gmail.com',
+    'scrypt$16384$8$1$Pzek4riN7E0OIrjqYxfshA==$QmCEZNh1Jo1G5UMC2km+pguAFsd3HUcx6wGv3wm51WFQLpbZPCOI8kFmpAWDe16lCk49cSDZxEPk9qGHKpJNDg==',
+    '09171234005', 'Active', 'VIP'),
+  ('00000000-0000-4000-8000-000000000109', 'user', 'Neithan Dela Cruz', 'neithan.delacruz@gmail.com',
+    'scrypt$16384$8$1$Pzek4riN7E0OIrjqYxfshA==$QmCEZNh1Jo1G5UMC2km+pguAFsd3HUcx6wGv3wm51WFQLpbZPCOI8kFmpAWDe16lCk49cSDZxEPk9qGHKpJNDg==',
+    '09171234006', 'Active', 'Customer'),
+  ('00000000-0000-4000-8000-000000000110', 'user', 'Reigner Vergara', 'reigner.vergara@gmail.com',
+    'scrypt$16384$8$1$Pzek4riN7E0OIrjqYxfshA==$QmCEZNh1Jo1G5UMC2km+pguAFsd3HUcx6wGv3wm51WFQLpbZPCOI8kFmpAWDe16lCk49cSDZxEPk9qGHKpJNDg==',
+    '09171234007', 'Disabled', 'Customer'),
+  ('00000000-0000-4000-8000-000000000111', 'user', 'Avril Aquino', 'avril.aquino@gmail.com',
+    'scrypt$16384$8$1$Pzek4riN7E0OIrjqYxfshA==$QmCEZNh1Jo1G5UMC2km+pguAFsd3HUcx6wGv3wm51WFQLpbZPCOI8kFmpAWDe16lCk49cSDZxEPk9qGHKpJNDg==',
+    '09171234008', 'Active', 'Customer');

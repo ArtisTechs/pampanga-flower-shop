@@ -1,0 +1,58 @@
+import type { Request } from "express";
+import { HttpError } from "../middleware/errorHandler.js";
+
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+export const bodyOf = (req: Request) => (isRecord(req.body) ? req.body : {});
+
+export const requireString = (value: unknown, field: string, max = 255, min = 1) => {
+  if (typeof value !== "string") {
+    throw new HttpError(400, `${field} is required`);
+  }
+  const trimmed = value.trim();
+  if (trimmed.length < min || trimmed.length > max) {
+    throw new HttpError(400, min > 1 ? `${field} must be ${min}-${max} characters` : `${field} is required (max ${max} characters)`);
+  }
+  return trimmed;
+};
+
+export const requireEmail = (value: unknown) => {
+  const email = requireString(value, "Email", 255).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpError(400, "Email is invalid");
+  }
+  return email;
+};
+
+export const requireContactNumber = (value: unknown) => {
+  const contact = requireString(value, "Contact number", 32);
+  if (!/^[0-9+()\s-]{7,32}$/.test(contact)) {
+    throw new HttpError(400, "Contact number is invalid");
+  }
+  return contact;
+};
+
+export const requireInt = (value: unknown, field: string, min: number, max: number) => {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
+    throw new HttpError(400, `${field} must be a whole number from ${min} to ${max}`);
+  }
+  return value;
+};
+
+export const requireOneOf = <T extends string>(value: unknown, field: string, allowed: readonly T[]): T => {
+  if (typeof value !== "string" || !allowed.includes(value as T)) {
+    throw new HttpError(400, `${field} must be one of: ${allowed.join(", ")}`);
+  }
+  return value as T;
+};
+
+export const requireId = (value: unknown, field = "id") => {
+  if (typeof value !== "string" || !/^[a-z0-9-]{1,128}$/i.test(value)) {
+    throw new HttpError(400, `Invalid ${field}`);
+  }
+  return value;
+};
+
+export const isDuplicateEntry = (error: unknown) =>
+  isRecord(error) && error.code === "ER_DUP_ENTRY";
