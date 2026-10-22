@@ -25,6 +25,11 @@ export const config = {
     port: Number(process.env.DB_PORT ?? 3306),
     user: required("DB_USER"),
     password: required("DB_PASSWORD"),
-    database: required("DB_NAME")
+    database: required("DB_NAME"),
+    // TLS for hosted MySQL (e.g. Aiven). DB_SSL_CA is the CA certificate's PEM text; "\n" escapes are accepted
+    // for hosts that only take single-line values. Without it, the system CAs are used.
+    ssl: process.env.DB_SSL === "true"
+      ? { ca: process.env.DB_SSL_CA?.replace(/\\n/g, "\n") || undefined, rejectUnauthorized: true }
+      : undefined
   }
 };
