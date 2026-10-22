@@ -5,6 +5,7 @@ import type {
   AdminProductInput,
   AdminDashboard,
   AdminOrder,
+  AdminOrderDetail,
   AdminOrderStatus,
   AdminReports,
   AdminUser,
@@ -18,6 +19,7 @@ import type {
   ProductCategory,
   ProductItem,
   RegisterInput,
+  ReportRange,
   SiteContent
 } from "../types/shop";
 import { resolveImagePath } from "../utils/assets";
@@ -85,9 +87,17 @@ export const logoutRequest = () => apiRequest<void>("/auth/logout", { method: "P
 
 export const fetchAdminDashboard = () => apiRequest<AdminDashboard>("/admin/dashboard");
 
-export const fetchAdminReports = () => apiRequest<AdminReports>("/admin/reports");
+export const fetchAdminReports = (range: ReportRange) => apiRequest<AdminReports>(`/admin/reports?range=${range}`);
 
 export const fetchAdminOrders = () => apiRequest<AdminOrder[]>("/admin/orders");
+
+export const fetchAdminOrder = async (orderId: string) => {
+  const order = await apiRequest<AdminOrderDetail>(`/admin/orders/${encodeURIComponent(orderId)}`);
+  return {
+    ...order,
+    items: order.items.map((item) => ({ ...item, image: item.image ? resolveImagePath(item.image, 200) : null }))
+  };
+};
 
 export const updateOrderStatus = (orderId: string, status: AdminOrderStatus) =>
   apiRequest<AdminOrder>(`/admin/orders/${encodeURIComponent(orderId)}`, { method: "PATCH", body: { status } });

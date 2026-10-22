@@ -202,6 +202,20 @@ export interface AdminOrder {
   status: AdminOrderStatus;
 }
 
+export interface AdminOrderDetail extends AdminOrder {
+  createdAt: string;
+  customerEmail: string | null;
+  items: Array<{
+    id: number;
+    name: string;
+    unitPricePhp: number;
+    quantity: number;
+    image: string | null;
+    customization: { size: string; palette: string; wrap: string; ribbon: string } | null;
+    flowers: Array<{ name: string; quantity: number }>;
+  }>;
+}
+
 export interface AdminDashboard {
   totalOrders: number;
   totalSalesPhp: number;
@@ -210,11 +224,21 @@ export interface AdminDashboard {
   recentOrders: AdminOrder[];
 }
 
+export type ReportRange = "7d" | "30d" | "90d" | "12m" | "all";
+
 export interface AdminReports {
-  totalOrders: number;
-  totalRevenuePhp: number;
-  averageOrderPhp: number;
-  popularFlowers: Array<{ id: string; name: string; orders: number }>;
+  range: ReportRange;
+  /** Shop-local dates (YYYY-MM-DD), inclusive. */
+  from: string;
+  to: string;
+  bucket: "day" | "week" | "month";
+  totals: { orders: number; revenuePhp: number; averageOrderPhp: number; customRevenueSharePct: number };
+  /** Same-length period just before `from`; null for all time. */
+  previous: { orders: number; revenuePhp: number } | null;
+  timeline: Array<{ start: string; orders: number; revenuePhp: number }>;
+  statusCounts: Record<AdminOrderStatus, number>;
+  topItems: Array<{ name: string; quantity: number; revenuePhp: number }>;
+  popularFlowers: Array<{ id: string; name: string; stems: number; orders: number }>;
 }
 
 export interface InventoryItem {
@@ -261,6 +285,7 @@ export interface AdminBuilderOption extends BuilderOption {
   group: BuilderOptionGroup;
   code: string;
   available: boolean;
+  isDefault: boolean;
 }
 
 export type BouquetBuilderSettingTab =

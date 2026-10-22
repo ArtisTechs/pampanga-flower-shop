@@ -1,12 +1,22 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { errorMessage } from "../api/client";
 import { fetchAdminUsers, updateAdminUser } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
 import { LoadState } from "../components/LoadState";
 import { AdminLayout } from "../components/admin/AdminLayout";
+import { AdminDialog, AdminPageHeader, AdminSegments, AdminUiIcon } from "../components/admin/AdminUi";
 import { useApiData } from "../hooks/useApiData";
-import type { Account, AdminUserRole, AdminUserStatus } from "../types/shop";
+import type { Account, AdminUser, AdminUserRole } from "../types/shop";
 
+type StatusFilter = "All" | "Active" | "Disabled";
+
+const initialsFrom = (name: string) =>
+  name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 
 interface AdminUsersPageProps {
   account: Account;
@@ -17,155 +27,228 @@ interface AdminUsersPageProps {
 export const AdminUsersPage = ({ account, onLogout, onToast }: AdminUsersPageProps) => {
   const usersData = useApiData(fetchAdminUsers, []);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"All" | AdminUserStatus>("All");
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const users = useMemo(() => usersData.data ?? [], [usersData.data]);
 
-  const editingUser = users.find((user) => user.id === editingUserId) ?? null;
+  const counts: Record<StatusFilter, number> = {
+    All: users.length,
+    Active: users.filter((user) => user.status === "Active").length,
+    Disabled: users.filter((user) => user.status === "Disabled").length
+  };
+  const vipCount = users.filter((user) => user.role === "VIP").length;
 
   const visibleUsers = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-    return users.filter((user) => {
-      const matchesSearch = normalizedSearch.length === 0
+    return users.filter((user) =>
+      (statusFilter === "All" || user.status === statusFilter)
+      && (normalizedSearch === ""
         || user.fullName.toLowerCase().includes(normalizedSearch)
         || user.email.toLowerCase().includes(normalizedSearch)
-        || user.contactNumber.includes(normalizedSearch);
-      const matchesStatus = statusFilter === "All" || user.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
+        || user.contactNumber.replace(/\s+/g, "").includes(normalizedSearch.replace(/\s+/g, "")))
+    );
   }, [search, statusFilter, users]);
 
-  const initialsFrom = (name: string) =>
-    name
-      .split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? "")
-      .join("");
+  const handleSaved = (saved: AdminUser) => {
+    usersData.updateData((current) => current.map((user) => (user.id === saved.id ? saved : user)));
+    setEditingUser(null);
+    onToast(`${saved.fullName} was updated.`, "success");
+  };
 
-  const handleSaveUser = async (event: React.FormEvent<HTMLFormElement>) => {
+  return (
+    <AdminLayout account={account} onLogout={onLogout}>
+      <div className="admin-page admin-products-page">
+        <AdminPageHeader
+          title="Users"
+          subtitle={usersData.data
+            ? `${counts.All} customers · ${vipCount} VIP · ${counts.Disabled} disabled`
+            : "Manage customer accounts"}
+        />
+
+        <section className="admin-products-toolbar admin-ui-toolbar-2" aria-label="Filter users">
+          <label className="admin-products-search">
+            <AdminUiIcon name="search" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search name, email, or phone..."
+              aria-label="Search users"
+            />
+          </label>
+          <AdminSegments
+            label="Filter by account status"
+            options={["All", "Active", "Disabled"] as const}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            counts={usersData.data ? counts : undefined}
+          />
+        </section>
+
+        {!usersData.data ? (
+          <LoadState error={usersData.error} onRetry={usersData.reload} />
+        ) : visibleUsers.length === 0 ? (
+          <div className="admin-products-empty" role="status">
+            <h2>No customers found</h2>
+            <p>Try a different search or status.</p>
+          </div>
+        ) : (
+          <section className="admin-ui-panel" aria-label="Customers">
+            <table className="admin-ui-table">
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Phone</th>
+                  <th>Tier</th>
+                  <th>Status</th>
+                  <th><span className="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleUsers.map((user) => (
+                  <tr key={user.id} className={user.status === "Disabled" ? "is-muted" : ""}>
+                    <td data-label="Customer">
+                      <div className="admin-ui-person">
+                        <span className="admin-ui-avatar" aria-hidden="true">{initialsFrom(user.fullName)}</span>
+                        <div>
+                          <strong>{user.fullName}</strong>
+                          <span className="admin-ui-muted">{user.email}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td data-label="Phone">{user.contactNumber || "—"}</td>
+                    <td data-label="Tier">
+                      <span className={`admin-ui-badge ${user.role === "VIP" ? "status-vip" : "status-neutral"}`}>
+                        {user.role === "VIP" ? "★ VIP" : "Customer"}
+                      </span>
+                    </td>
+                    <td data-label="Status">
+                      <span className={`admin-ui-badge ${user.status === "Active" ? "status-completed" : "status-neutral"}`}>
+                        {user.status}
+                      </span>
+                    </td>
+                    <td className="admin-ui-row-action">
+                      <button type="button" className="admin-ui-link-button" onClick={() => setEditingUser(user)} aria-label={`Edit ${user.fullName}`}>
+                        <AdminUiIcon name="edit" />
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+      </div>
+
+      {editingUser ? (
+        <UserEditDialog user={editingUser} onClose={() => setEditingUser(null)} onSaved={handleSaved} onToast={onToast} />
+      ) : null}
+    </AdminLayout>
+  );
+};
+
+interface UserEditDialogProps {
+  user: AdminUser;
+  onClose: () => void;
+  onSaved: (user: AdminUser) => void;
+  onToast: (message: string, tone: ToastTone) => void;
+}
+
+type FieldErrors = Partial<Record<"fullName" | "email" | "contactNumber", string>>;
+
+const UserEditDialog = ({ user, onClose, onSaved, onToast }: UserEditDialogProps) => {
+  const [fullName, setFullName] = useState(user.fullName);
+  const [email, setEmail] = useState(user.email);
+  const [contactNumber, setContactNumber] = useState(user.contactNumber);
+  const [role, setRole] = useState<AdminUserRole>(user.role);
+  const [isActive, setIsActive] = useState(user.status === "Active");
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!editingUser || isSaving) {
+    if (isSaving) {
       return;
     }
 
-    const formData = new FormData(event.currentTarget);
-    const nextName = String(formData.get("fullName") ?? "").trim();
-    const nextEmail = String(formData.get("email") ?? "").trim();
-    const nextContact = String(formData.get("contactNumber") ?? "").trim();
-    const nextStatus = String(formData.get("status") ?? "Active") as AdminUserStatus;
-    const nextRole = String(formData.get("role") ?? "Customer") as AdminUserRole;
-
-    if (!nextName || !nextEmail || !nextContact) {
+    const nextErrors: FieldErrors = {
+      fullName: fullName.trim() ? undefined : "Enter the customer's name.",
+      email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? undefined : "Enter a valid email address.",
+      contactNumber: /^[0-9+()\s-]{7,32}$/.test(contactNumber.trim()) ? undefined : "Enter a valid phone number."
+    };
+    setErrors(nextErrors);
+    if (Object.values(nextErrors).some(Boolean)) {
       return;
     }
 
     setIsSaving(true);
     try {
-      const savedUser = await updateAdminUser({
-        ...editingUser,
-        fullName: nextName,
-        email: nextEmail,
-        contactNumber: nextContact,
-        status: nextStatus,
-        role: nextRole
-      });
-      usersData.updateData((currentUsers) => currentUsers.map((user) => (user.id === savedUser.id ? savedUser : user)));
-      setEditingUserId(null);
-      onToast(`${savedUser.fullName} was updated.`, "success");
+      onSaved(await updateAdminUser({
+        ...user,
+        fullName: fullName.trim(),
+        email: email.trim(),
+        contactNumber: contactNumber.trim(),
+        role,
+        status: isActive ? "Active" : "Disabled"
+      }));
     } catch (error) {
       onToast(errorMessage(error), "error");
-    } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <AdminLayout account={account} onLogout={onLogout}>
-      <div className="admin-page admin-users-page">
-        <h1>Users</h1>
-
-        <section className="admin-users-header-panel" aria-label="User list controls">
-          <h2>User List</h2>
-          <div className="admin-users-filters">
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search name, email, or mobile..."
-              aria-label="Search users"
-            />
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "All" | AdminUserStatus)} aria-label="Filter users by status">
-              <option value="All">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Disabled">Disabled</option>
-            </select>
-          </div>
-        </section>
-
-        <section className="admin-users-list-panel" aria-label="Users table">
-          <div className="admin-users-list-head">
-            <span>No.</span>
-            <span>Profile</span>
-            <span>Email</span>
-            <span>Action</span>
-          </div>
-
-          <div className="admin-users-list-body">
-            {!usersData.data ? <LoadState error={usersData.error} onRetry={usersData.reload} /> : null}
-            {visibleUsers.map((user, index) => (
-              <article key={user.id} className="admin-user-row">
-                <span>{index + 1}</span>
-                <div className="admin-user-profile">
-                  <span className="admin-user-avatar">{initialsFrom(user.fullName)}</span>
-                  <strong>{user.fullName}</strong>
-                </div>
-                <span>{user.email}</span>
-                <button type="button" onClick={() => setEditingUserId(user.id)}>Edit</button>
-              </article>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      {editingUser ? (
-        <div className="admin-user-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-user-edit-title">
-          <form className="admin-user-modal" onSubmit={handleSaveUser}>
-            <h3 id="admin-user-edit-title">Edit User</h3>
-            <label>
-              Full Name
-              <input name="fullName" defaultValue={editingUser.fullName} required />
-            </label>
-            <label>
-              Email
-              <input name="email" type="email" defaultValue={editingUser.email} required />
-            </label>
-            <label>
-              Contact Number
-              <input name="contactNumber" defaultValue={editingUser.contactNumber} required />
-            </label>
-            <label>
-              Role
-              <select name="role" defaultValue={editingUser.role}>
-                <option value="Customer">Customer</option>
-                <option value="VIP">VIP</option>
-              </select>
-            </label>
-            <label>
-              Status
-              <select name="status" defaultValue={editingUser.status}>
-                <option value="Active">Active</option>
-                <option value="Disabled">Disabled</option>
-              </select>
-            </label>
-            <div className="admin-user-modal-actions">
-              <button type="button" onClick={() => setEditingUserId(null)}>Cancel</button>
-              <button type="submit" disabled={isSaving}>{isSaving ? "Saving..." : "Save"}</button>
-            </div>
-          </form>
+    <AdminDialog
+      title="Edit customer"
+      subtitle={user.email}
+      onClose={onClose}
+      isBusy={isSaving}
+      onSubmit={handleSubmit}
+      size="narrow"
+      footer={
+        <>
+          <button type="button" className="admin-products-secondary" onClick={onClose} disabled={isSaving}>Cancel</button>
+          <button type="submit" className="admin-products-primary" disabled={isSaving}>{isSaving ? "Saving..." : "Save changes"}</button>
+        </>
+      }
+    >
+      <div className="admin-product-fields">
+        <label className="admin-product-field">
+          <span className="admin-product-label">Full name <em>*</em></span>
+          <input className={errors.fullName ? "invalid" : ""} value={fullName} onChange={(event) => setFullName(event.target.value)} maxLength={120} />
+          {errors.fullName ? <span className="admin-product-error">{errors.fullName}</span> : null}
+        </label>
+        <div className="admin-product-field-row admin-ui-field-row-even">
+          <label className="admin-product-field">
+            <span className="admin-product-label">Email <em>*</em></span>
+            <input type="email" className={errors.email ? "invalid" : ""} value={email} onChange={(event) => setEmail(event.target.value)} />
+            {errors.email ? <span className="admin-product-error">{errors.email}</span> : null}
+          </label>
+          <label className="admin-product-field">
+            <span className="admin-product-label">Phone <em>*</em></span>
+            <input type="tel" className={errors.contactNumber ? "invalid" : ""} value={contactNumber} onChange={(event) => setContactNumber(event.target.value)} />
+            {errors.contactNumber ? <span className="admin-product-error">{errors.contactNumber}</span> : null}
+          </label>
         </div>
-      ) : null}
-    </AdminLayout>
+        <label className="admin-product-field">
+          <span className="admin-product-label">Tier</span>
+          <select value={role} onChange={(event) => setRole(event.target.value as AdminUserRole)}>
+            <option value="Customer">Customer</option>
+            <option value="VIP">VIP</option>
+          </select>
+        </label>
+        <div className="admin-product-switches">
+          <label className="admin-product-switch">
+            <input type="checkbox" role="switch" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
+            <span className="admin-product-switch-track" aria-hidden="true" />
+            <span>
+              <strong>Account active</strong>
+              <small>{isActive ? "Customer can log in and order" : "Customer is logged out and can't log in"}</small>
+            </span>
+          </label>
+        </div>
+      </div>
+    </AdminDialog>
   );
 };

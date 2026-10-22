@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { errorMessage } from "../api/client";
 import { fetchSiteContent, saveSiteContent } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
 import { LoadState } from "../components/LoadState";
 import { AdminLayout } from "../components/admin/AdminLayout";
+import { AdminPageHeader } from "../components/admin/AdminUi";
 import { useApiData } from "../hooks/useApiData";
 import type { Account, SiteContent } from "../types/shop";
 
@@ -26,8 +27,8 @@ export const AdminWebsiteContentPage = ({ account, onLogout, onToast }: AdminWeb
           onToast={onToast}
         />
       ) : (
-        <div className="admin-page admin-website-content-page">
-          <h1>Website Content</h1>
+        <div className="admin-page admin-products-page">
+          <AdminPageHeader title="Website Content" />
           <LoadState error={content.error} onRetry={content.reload} />
         </div>
       )}
@@ -109,27 +110,29 @@ interface WebsiteContentEditorProps {
 }
 
 const WebsiteContentEditor = ({ initialContent, onSaved, onToast }: WebsiteContentEditorProps) => {
-  const [mode, setMode] = useState<"view" | "edit">("view");
   const [savedContent, setSavedContent] = useState<SiteContent>(initialContent);
   const [draftContent, setDraftContent] = useState<SiteContent>(initialContent);
-  const [showSavedTag, setShowSavedTag] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const changedCount = (Object.keys(draftContent) as Array<keyof SiteContent>)
+    .filter((key) => draftContent[key] !== savedContent[key]).length;
+  const isDirty = changedCount > 0;
 
-  const handleToggleEdit = () => {
-    if (mode === "view") {
-      setDraftContent(savedContent);
-      setMode("edit");
-      setShowSavedTag(false);
-      return;
+  // Warn before leaving the page with unsaved edits.
+  useEffect(() => {
+    if (!isDirty) {
+      return undefined;
     }
-
-    setMode("view");
-    setDraftContent(savedContent);
-    setShowSavedTag(false);
-  };
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
 
   const handleSave = async () => {
-    if (isSaving) {
+    const emptyField = contentSections
+      .flatMap((section) => section.fields)
+      .find((field) => !draftContent[field.key].trim());
+    if (emptyField) {
+      onToast(`"${emptyField.label}" can't be empty.`, "error");
       return;
     }
 
@@ -137,10 +140,9 @@ const WebsiteContentEditor = ({ initialContent, onSaved, onToast }: WebsiteConte
     try {
       const saved = await saveSiteContent(draftContent);
       setSavedContent(saved);
+      setDraftContent(saved);
       onSaved(saved);
-      setMode("view");
-      setShowSavedTag(true);
-      window.setTimeout(() => setShowSavedTag(false), 2200);
+      onToast("Website content saved. Changes are live on the storefront.", "success");
     } catch (error) {
       onToast(errorMessage(error), "error");
     } finally {
@@ -148,38 +150,34 @@ const WebsiteContentEditor = ({ initialContent, onSaved, onToast }: WebsiteConte
     }
   };
 
-  const currentContent = mode === "edit" ? draftContent : savedContent;
-
   return (
-    <div className="admin-page admin-website-content-page">
-      <div className="admin-website-content-topbar">
-        <h1>Website Content</h1>
-        <div className="admin-website-content-actions">
-          <button type="button" className={mode === "edit" ? "active" : ""} onClick={handleToggleEdit}>
-            {mode === "view" ? "Edit Mode" : "View Mode"}
-          </button>
-          {mode === "edit" ? (
-            <button type="button" className="save-button" onClick={handleSave} disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save"}
-            </button>
-          ) : null}
-          {showSavedTag ? <span className="saved-tag">Saved</span> : null}
-        </div>
-      </div>
+    <div className="admin-page admin-products-page admin-ui-content-page">
+      <AdminPageHeader
+        title="Website Content"
+        subtitle={<>Text shown on the storefront. Wrap words in <code>*asterisks*</code> in a heading to highlight them.</>}
+        actions={
+          <a className="admin-products-secondary" href={import.meta.env.BASE_URL} target="_blank" rel="noreferrer">
+            View site ↗
+          </a>
+        }
+      />
 
-      <p className="admin-content-hint">Tip: wrap words in *asterisks* in a heading to highlight them in pink italics.</p>
-
-      <div className="admin-website-content-grid">
+      <div className="admin-ui-content-grid">
         {contentSections.map((section) => (
-          <section className="admin-content-card" key={section.title}>
+          <section className="admin-ui-panel admin-ui-content-card" key={section.title}>
             <h2>{section.title}</h2>
-            <p>{section.description}</p>
-            {section.fields.map((field) => (
-              <label key={field.key}>
-                {field.label}
-                {mode === "edit" ? (
-                  field.multiline ? (
+            <p className="admin-ui-muted">{section.description}</p>
+            {section.fields.map((field) => {
+              const isChanged = draftContent[field.key] !== savedContent[field.key];
+              return (
+                <label className="admin-product-field" key={field.key}>
+                  <span className="admin-product-label">
+                    {field.label}
+                    {isChanged ? <small className="admin-ui-changed">Edited</small> : null}
+                  </span>
+                  {field.multiline ? (
                     <textarea
+                      rows={3}
                       value={draftContent[field.key]}
                       onChange={(event) => setDraftContent((current) => ({ ...current, [field.key]: event.target.value }))}
                     />
@@ -188,15 +186,27 @@ const WebsiteContentEditor = ({ initialContent, onSaved, onToast }: WebsiteConte
                       value={draftContent[field.key]}
                       onChange={(event) => setDraftContent((current) => ({ ...current, [field.key]: event.target.value }))}
                     />
-                  )
-                ) : (
-                  <div className={`admin-content-view ${field.multiline ? "multiline" : ""}`}>{currentContent[field.key]}</div>
-                )}
-              </label>
-            ))}
+                  )}
+                </label>
+              );
+            })}
           </section>
         ))}
       </div>
+
+      {isDirty ? (
+        <div className="admin-ui-savebar" role="status">
+          <span>{changedCount} unsaved {changedCount === 1 ? "change" : "changes"}</span>
+          <div>
+            <button type="button" className="admin-products-secondary" onClick={() => setDraftContent(savedContent)} disabled={isSaving}>
+              Discard
+            </button>
+            <button type="button" className="admin-products-primary" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save changes"}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

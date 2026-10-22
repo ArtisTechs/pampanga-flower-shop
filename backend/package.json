@@ -14,6 +14,7 @@
     "migrate:prod": "node dist/db/migrate.js",
     "seed": "tsx src/db/seed.ts",
     "db:setup": "npm run migrate && npm run seed",
+    "images:migrate": "tsx src/db/migrateImagesToCloudinary.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

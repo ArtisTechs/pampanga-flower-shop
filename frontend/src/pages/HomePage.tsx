@@ -1,7 +1,8 @@
 import { useEffect, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router";
-import { fetchHome } from "../api/shop";
+import { fetchHome, fetchProducts } from "../api/shop";
 import { EmphasisText } from "../components/EmphasisText";
+import { FeaturedCarousel } from "../components/FeaturedCarousel";
 import { LoadState } from "../components/LoadState";
 import { useApiData } from "../hooks/useApiData";
 import type { SiteContent } from "../types/shop";
@@ -16,6 +17,7 @@ interface HomePageProps {
 export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePageProps) => {
   const navigate = useNavigate();
   const home = useApiData(fetchHome, []);
+  const bestSellers = useApiData(() => fetchProducts({ collection: "best-sellers" }), []);
   const occasionCards = home.data?.occasionCards ?? [];
   const flowerTypeCards = home.data?.flowerTypeCards ?? [];
   const features = home.data?.features ?? [];
@@ -48,7 +50,7 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePagePr
 
     return () => observer.disconnect();
     // Re-observe once API content has rendered new cards.
-  }, [home.data]);
+  }, [home.data, bestSellers.data]);
 
   const handleStartCustomization = () => {
     if (!onRequireLogin()) {
@@ -82,6 +84,21 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePagePr
           </div>
         </div>
       </section>
+
+      {bestSellers.data && bestSellers.data.length > 0 ? (
+        <section className="featured-section" id="best-sellers" aria-labelledby="featured-title">
+          <div className="featured-heading reveal-on-scroll">
+            <p className="featured-eyebrow">Loved in Pampanga</p>
+            <h2 id="featured-title">Our <em>Best Sellers</em></h2>
+            <Link to="/collection/best-sellers" className="featured-view-all">View all</Link>
+          </div>
+          <FeaturedCarousel
+            products={bestSellers.data.slice(0, 8)}
+            route="/collection/best-sellers"
+            label="Best-selling bouquets"
+          />
+        </section>
+      ) : null}
 
       <section className="occasion-section reveal-on-scroll" id="occasions">
         <div className="title reveal-on-scroll">

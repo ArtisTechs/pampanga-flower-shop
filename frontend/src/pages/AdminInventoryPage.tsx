@@ -1,16 +1,20 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { errorMessage } from "../api/client";
 import { adjustInventory, fetchInventory } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
 import { LoadState } from "../components/LoadState";
 import { AdminLayout } from "../components/admin/AdminLayout";
+import { AdminPageHeader, AdminSegments, AdminUiIcon } from "../components/admin/AdminUi";
 import { useApiData } from "../hooks/useApiData";
-import type { Account } from "../types/shop";
+import type { Account, InventoryItem } from "../types/shop";
 
-type InventoryTab = "Add-Ons" | "Flower Inventory";
-type StockFilter = "All" | "Low Stock" | "Healthy";
-type StockDelta = -20 | -10 | 10 | 20;
+type InventoryTab = "Flowers" | "Add-ons";
+type StockFilter = "all" | "low" | "healthy";
+type SortBy = "name" | "stock-asc" | "stock-desc";
 
+const tabKinds: Record<InventoryTab, InventoryItem["kind"]> = { Flowers: "flower", "Add-ons": "add-on" };
+const isLowStock = (item: InventoryItem) => item.inStock <= item.threshold;
 
 interface AdminInventoryPageProps {
   account: Account;
@@ -19,53 +23,56 @@ interface AdminInventoryPageProps {
 }
 
 export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventoryPageProps) => {
-  const [activeTab, setActiveTab] = useState<InventoryTab>("Flower Inventory");
-  const [stockFilter, setStockFilter] = useState<StockFilter>("All");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<InventoryTab>("Flowers");
+  // ?stock=low (from the dashboard) opens the low-stock view.
+  const [stockFilter, setStockFilter] = useState<StockFilter>(searchParams.get("stock") === "low" ? "low" : "all");
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "stock-asc" | "stock-desc">("name");
-  const [deltasByItem, setDeltasByItem] = useState<Record<string, StockDelta>>({});
+  const [sortBy, setSortBy] = useState<SortBy>("name");
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const inventory = useApiData(fetchInventory, []);
-  const activeKind = activeTab === "Flower Inventory" ? "flower" : "add-on";
-  const activeInventory = useMemo(
-    () => (inventory.data ?? []).filter((item) => item.kind === activeKind),
-    [activeKind, inventory.data]
-  );
+  const allItems = useMemo(() => inventory.data ?? [], [inventory.data]);
 
-  const filteredInventory = useMemo(() => {
+  const tabCounts = {
+    Flowers: allItems.filter((item) => item.kind === "flower").length,
+    "Add-ons": allItems.filter((item) => item.kind === "add-on").length
+  };
+  const lowCount = allItems.filter(isLowStock).length;
+
+  const visibleItems = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-
-    const filtered = activeInventory.filter((item) => {
-      const matchesSearch = normalizedSearch.length === 0
+    const filtered = allItems.filter((item) =>
+      item.kind === tabKinds[activeTab]
+      && (normalizedSearch === ""
         || item.name.toLowerCase().includes(normalizedSearch)
-        || item.description.toLowerCase().includes(normalizedSearch);
-      const isLowStock = item.inStock <= item.threshold;
-      const matchesStock = stockFilter === "All"
-        || (stockFilter === "Low Stock" && isLowStock)
-        || (stockFilter === "Healthy" && !isLowStock);
+        || item.description.toLowerCase().includes(normalizedSearch))
+      && (stockFilter === "all" || (stockFilter === "low") === isLowStock(item))
+    );
+    const sorters: Record<SortBy, (first: InventoryItem, second: InventoryItem) => number> = {
+      name: (first, second) => first.name.localeCompare(second.name),
+      "stock-asc": (first, second) => first.inStock - second.inStock,
+      "stock-desc": (first, second) => second.inStock - first.inStock
+    };
+    return [...filtered].sort(sorters[sortBy]);
+  }, [activeTab, allItems, search, sortBy, stockFilter]);
 
-      return matchesSearch && matchesStock;
-    });
-
-    if (sortBy === "stock-asc") {
-      return [...filtered].sort((first, second) => first.inStock - second.inStock);
+  const handleAdjust = async (item: InventoryItem, direction: 1 | -1) => {
+    const amount = Number(amounts[item.id] ?? "10");
+    if (!Number.isInteger(amount) || amount <= 0) {
+      onToast("Enter a whole number above 0.", "error");
+      return;
     }
 
-    if (sortBy === "stock-desc") {
-      return [...filtered].sort((first, second) => second.inStock - first.inStock);
-    }
-
-    return [...filtered].sort((first, second) => first.name.localeCompare(second.name));
-  }, [activeInventory, search, sortBy, stockFilter]);
-
-  const handleUpdateItemStock = async (itemId: string) => {
-    const delta = deltasByItem[itemId] ?? 10;
-
-    setUpdatingItemId(itemId);
+    setUpdatingItemId(item.id);
     try {
-      const updatedItem = await adjustInventory(itemId, delta);
-      inventory.updateData((current) => current.map((item) => (item.id === itemId ? updatedItem : item)));
-      onToast(`${updatedItem.name} stock is now ${updatedItem.inStock} ${updatedItem.unit}.`, "success");
+      const updatedItem = await adjustInventory(item.id, amount * direction);
+      inventory.updateData((current) => current.map((entry) => (entry.id === item.id ? updatedItem : entry)));
+      const capped = direction === 1 && updatedItem.inStock === updatedItem.capacity && item.inStock + amount > item.capacity;
+      onToast(
+        `${updatedItem.name}: ${updatedItem.inStock} ${updatedItem.unit} in stock${capped ? " (storage is full)" : ""}.`,
+        "success"
+      );
     } catch (error) {
       onToast(errorMessage(error), "error");
     } finally {
@@ -75,26 +82,24 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
 
   return (
     <AdminLayout account={account} onLogout={onLogout}>
-      <div className="admin-page admin-inventory-page">
-        <h1>Add-Ons &amp; Inventory</h1>
+      <div className="admin-page admin-products-page">
+        <AdminPageHeader
+          title="Inventory"
+          subtitle={inventory.data
+            ? `${tabCounts.Flowers} flowers · ${tabCounts["Add-ons"]} add-ons · ${lowCount === 0 ? "everything is stocked" : `${lowCount} need restocking`}`
+            : "Track flower stems and add-on supplies"}
+        />
 
-        <div className="admin-inventory-tabs" role="tablist" aria-label="Inventory sections">
-          {(["Add-Ons", "Flower Inventory"] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={tab === activeTab ? "active" : ""}
-              role="tab"
-              aria-selected={tab === activeTab}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        <section className="admin-inventory-panel" aria-label={`${activeTab} inventory`}>
-          <div className="admin-inventory-filters">
+        <section className="admin-products-toolbar admin-ui-toolbar-inventory" aria-label="Filter inventory">
+          <AdminSegments
+            label="Inventory type"
+            options={["Flowers", "Add-ons"] as const}
+            value={activeTab}
+            onChange={setActiveTab}
+            counts={inventory.data ? tabCounts : undefined}
+          />
+          <label className="admin-products-search">
+            <AdminUiIcon name="search" />
             <input
               type="search"
               value={search}
@@ -102,74 +107,85 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
               placeholder={`Search ${activeTab.toLowerCase()}...`}
               aria-label={`Search ${activeTab}`}
             />
-            <select value={stockFilter} onChange={(event) => setStockFilter(event.target.value as StockFilter)} aria-label="Filter by stock status">
-              <option value="All">All Stock</option>
-              <option value="Low Stock">Low Stock</option>
-              <option value="Healthy">Healthy Stock</option>
-            </select>
-            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as "name" | "stock-asc" | "stock-desc")} aria-label="Sort inventory">
-              <option value="name">Sort: Name</option>
-              <option value="stock-asc">Sort: Lowest Stock</option>
-              <option value="stock-desc">Sort: Highest Stock</option>
-            </select>
-          </div>
+          </label>
+          <select className="admin-products-select" value={stockFilter} onChange={(event) => setStockFilter(event.target.value as StockFilter)} aria-label="Filter by stock level">
+            <option value="all">All stock levels</option>
+            <option value="low">Low stock only</option>
+            <option value="healthy">Healthy only</option>
+          </select>
+          <select className="admin-products-select" value={sortBy} onChange={(event) => setSortBy(event.target.value as SortBy)} aria-label="Sort inventory">
+            <option value="name">Sort: Name</option>
+            <option value="stock-asc">Sort: Lowest stock</option>
+            <option value="stock-desc">Sort: Highest stock</option>
+          </select>
+        </section>
 
-          <div className="admin-inventory-list">
-            {!inventory.data ? <LoadState error={inventory.error} onRetry={inventory.reload} /> : null}
-            {filteredInventory.map((item) => {
-              const isLowStock = item.inStock <= item.threshold;
+        {!inventory.data ? (
+          <LoadState error={inventory.error} onRetry={inventory.reload} />
+        ) : visibleItems.length === 0 ? (
+          <div className="admin-products-empty" role="status">
+            <h2>{stockFilter === "low" ? "Nothing needs restocking" : "No items found"}</h2>
+            <p>{stockFilter === "low" ? "Every item is above its restock level." : "Try a different search or filter."}</p>
+          </div>
+        ) : (
+          <ul className="admin-ui-panel admin-ui-inventory-list" aria-label={`${activeTab} stock`}>
+            {visibleItems.map((item) => {
+              const low = isLowStock(item);
               const fillPercent = Math.max(0, Math.min(100, (item.inStock / item.capacity) * 100));
+              const isUpdating = updatingItemId === item.id;
 
               return (
-                <article key={item.id} className={`admin-inventory-card ${isLowStock ? "low-stock" : ""}`}>
-                  <div className="admin-inventory-card-top">
-                    <div>
-                      <h3>{item.name}</h3>
-                      <p>{item.description}</p>
-                    </div>
-                    <div className="admin-inventory-meta">
-                      <div>
-                        <span>Threshold</span>
-                        <strong>{item.threshold} {item.unit}</strong>
-                      </div>
-                      <div>
-                        <span>In Stock</span>
-                        <strong>{item.inStock}</strong>
-                      </div>
-                    </div>
+                <li key={item.id} className={low ? "is-low" : ""}>
+                  <div className="admin-ui-inventory-info">
+                    <h3>
+                      {item.name}
+                      {low ? <span className="admin-ui-badge status-low">Low stock</span> : null}
+                    </h3>
+                    <p className="admin-ui-muted">{item.description}</p>
                   </div>
-
-                  <div className="admin-inventory-card-bottom">
-                    <div className="admin-inventory-progress" aria-label={`${item.name} stock level`}>
+                  <div className="admin-ui-inventory-level">
+                    <div className="admin-ui-level-text">
+                      <strong>{item.inStock}</strong> / {item.capacity} {item.unit}
+                      <span className="admin-ui-muted">Restock at {item.threshold}</span>
+                    </div>
+                    <div className="admin-ui-level-bar" role="meter" aria-valuemin={0} aria-valuemax={item.capacity} aria-valuenow={item.inStock} aria-label={`${item.name} stock level`}>
                       <span style={{ width: `${fillPercent}%` }} />
-                    </div>
-                    <span className="admin-inventory-units">{item.capacity} {item.unit}</span>
-                    <div className="admin-inventory-actions">
-                      <select
-                        value={String(deltasByItem[item.id] ?? 10)}
-                        onChange={(event) =>
-                          setDeltasByItem((current) => ({
-                            ...current,
-                            [item.id]: Number(event.target.value) as StockDelta
-                          }))
-                        }
-                        aria-label={`Stock adjustment for ${item.name}`}
-                      >
-                        <option value="-20">-20</option>
-                        <option value="-10">-10</option>
-                        <option value="10">+10</option>
-                        <option value="20">+20</option>
-                      </select>
-                      <button type="button" onClick={() => handleUpdateItemStock(item.id)} disabled={updatingItemId === item.id}>
-                        Update
-                      </button>
+                      <i style={{ left: `${Math.min(100, (item.threshold / item.capacity) * 100)}%` }} aria-hidden="true" />
                     </div>
                   </div>
-                </article>
+                  <div className="admin-ui-adjust">
+                    <button
+                      type="button"
+                      onClick={() => handleAdjust(item, -1)}
+                      disabled={isUpdating || item.inStock === 0}
+                      aria-label={`Remove stock from ${item.name}`}
+                    >
+                      <AdminUiIcon name="minus" />
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      inputMode="numeric"
+                      value={amounts[item.id] ?? "10"}
+                      onChange={(event) => setAmounts((current) => ({ ...current, [item.id]: event.target.value }))}
+                      aria-label={`Amount to adjust for ${item.name}`}
+                    />
+                    <button
+                      type="button"
+                      className="add"
+                      onClick={() => handleAdjust(item, 1)}
+                      disabled={isUpdating || item.inStock >= item.capacity}
+                      aria-label={`Add stock to ${item.name}`}
+                    >
+                      <AdminUiIcon name="plus" />
+                    </button>
+                  </div>
+                </li>
               );
             })}
-          </div>
-        </section>
+          </ul>
+        )}
       </div>
     </AdminLayout>
   );

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { errorMessage } from "../api/client";
 import { createProduct, fetchAdminProducts, fetchCategories, updateProduct, uploadProductImage } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
 import { LoadState } from "../components/LoadState";
 import { AdminLayout } from "../components/admin/AdminLayout";
+import { AdminUiIcon as Icon } from "../components/admin/AdminUi";
 import { useApiData } from "../hooks/useApiData";
 import type { Account, AdminProduct, AdminProductInput, ProductCategory } from "../types/shop";
 import { resolveImagePath } from "../utils/assets";
@@ -14,22 +15,6 @@ const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_DESCRIPTION = 1000;
 
 type StatusFilter = "All" | "Visible" | "Hidden";
-type IconName = "plus" | "search" | "edit" | "eye" | "eye-off" | "upload" | "close";
-
-const iconPaths: Record<IconName, ReactNode> = {
-  plus: <path d="M12 5v14M5 12h14" />,
-  search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
-  edit: <><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></>,
-  eye: <><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" /><circle cx="12" cy="12" r="2.5" /></>,
-  "eye-off": <><path d="M3 3l18 18" /><path d="M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.4 7.6A17 17 0 0 0 2.5 12s3.5 6 9.5 6a9.6 9.6 0 0 0 4-.9" /></>,
-  upload: <><path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></>,
-  close: <path d="M6 6l12 12M18 6 6 18" />
-};
-
-const Icon = ({ name }: { name: IconName }) => (
-  <svg className="admin-products-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{iconPaths[name]}</svg>
-);
-
 const toInput = ({ categoryId, name, description, pricePhp, imagePath, bestSeller, active }: AdminProduct): AdminProductInput => ({
   categoryId,
   name,

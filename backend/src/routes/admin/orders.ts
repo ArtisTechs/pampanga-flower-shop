@@ -42,6 +42,75 @@ adminOrdersRouter.get("/orders", async (req, res) => {
   res.json(rows.map(toAdminOrder));
 });
 
+interface OrderDetailRow extends OrderRow {
+  created_at: Date;
+  customer_email: string | null;
+}
+
+interface OrderItemRow extends RowDataPacket {
+  id: number;
+  product_name: string;
+  unit_price_php: number;
+  quantity: number;
+  customization: { size: string; palette: string; wrap: string; ribbon: string } | null;
+  image_path: string | null;
+}
+
+interface OrderItemFlowerRow extends RowDataPacket {
+  order_item_id: number;
+  flower_name: string;
+  quantity: number;
+}
+
+// What the shop needs to prepare: every item with its bouquet details and flower counts.
+adminOrdersRouter.get("/orders/:id", async (req, res) => {
+  const id = requireId(req.params.id, "order");
+  const [orders] = await pool.query<OrderDetailRow[]>(
+    `SELECT o.id, o.customer_name, o.contact_number, o.bouquet_size, o.pickup_at, o.total_php, o.status,
+            o.created_at, u.email AS customer_email
+     FROM orders o
+     LEFT JOIN users u ON u.id = o.user_id
+     WHERE o.id = ?`,
+    [id]
+  );
+  if (orders.length === 0) {
+    throw new HttpError(404, "Order not found");
+  }
+
+  const [items] = await pool.query<OrderItemRow[]>(
+    `SELECT oi.id, oi.product_name, oi.unit_price_php, oi.quantity, oi.customization, p.image_path
+     FROM order_items oi
+     LEFT JOIN products p ON p.id = oi.product_id
+     WHERE oi.order_id = ?
+     ORDER BY oi.id`,
+    [id]
+  );
+  const [flowers] = items.length > 0
+    ? await pool.query<OrderItemFlowerRow[]>(
+        "SELECT order_item_id, flower_name, quantity FROM order_item_flowers WHERE order_item_id IN (?) ORDER BY flower_name",
+        [items.map((item) => item.id)]
+      )
+    : [[] as OrderItemFlowerRow[]];
+
+  const order = orders[0];
+  res.json({
+    ...toAdminOrder(order),
+    createdAt: order.created_at.toISOString(),
+    customerEmail: order.customer_email,
+    items: items.map((item) => ({
+      id: item.id,
+      name: item.product_name,
+      unitPricePhp: item.unit_price_php,
+      quantity: item.quantity,
+      image: item.image_path,
+      customization: item.customization,
+      flowers: flowers
+        .filter((flower) => flower.order_item_id === item.id)
+        .map((flower) => ({ name: flower.flower_name, quantity: flower.quantity }))
+    }))
+  });
+});
+
 adminOrdersRouter.patch("/orders/:id", async (req, res) => {
   const id = requireId(req.params.id, "order");
   const status = requireOneOf(bodyOf(req).status, "status", ORDER_STATUSES);

@@ -27,8 +27,7 @@ const PRODUCT_SELECT = `
   FROM products p
   JOIN categories c ON c.id = p.category_id`;
 
-// Shape matches AdminProduct in frontend/src/types/shop.ts. imagePath is either a public-folder path
-// (seeded products) or a Cloudinary URL (uploaded from the admin panel).
+// Shape matches AdminProduct in frontend/src/types/shop.ts. imagePath is a Cloudinary URL.
 const toAdminProduct = (row: AdminProductRow) => ({
   id: row.id,
   categoryId: row.category_id,
@@ -52,10 +51,10 @@ const hasImageSignature = (data: Buffer, type: (typeof IMAGE_TYPES)[number]) => 
   return data.subarray(0, 4).toString("latin1") === "RIFF" && data.subarray(8, 12).toString("latin1") === "WEBP";
 };
 
+// All product images live on Cloudinary (seeded ones were moved by `npm run images:migrate`).
 const requireImagePath = (value: unknown) => {
   const imagePath = requireString(value, "Image", 500);
-  const isSeededAsset = /^images\/[a-z0-9/_.-]+$/i.test(imagePath) && !imagePath.includes("..");
-  if (!isSeededAsset && !isCloudinaryImageUrl(imagePath)) {
+  if (!isCloudinaryImageUrl(imagePath)) {
     throw new HttpError(400, "Please upload a product image");
   }
   return imagePath;

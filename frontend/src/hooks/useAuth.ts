@@ -12,7 +12,8 @@ export const useAuth = () => {
 
     // Restores the session from the stored token (also when another tab logs in or out).
     const restoreSession = () => {
-      if (!getAuthToken()) {
+      const token = getAuthToken();
+      if (!token) {
         setCurrentAccount(null);
         setIsAuthLoading(false);
         return;
@@ -26,7 +27,8 @@ export const useAuth = () => {
           }
         })
         .catch((error: unknown) => {
-          if (error instanceof ApiError && error.status === 401) {
+          // Only clear the token this request used; a newer login may have replaced it meanwhile.
+          if (error instanceof ApiError && error.status === 401 && getAuthToken() === token) {
             clearAuthToken();
           }
           if (isCurrent) {

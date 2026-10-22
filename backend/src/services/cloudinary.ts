@@ -28,17 +28,23 @@ interface CloudinaryUploadResponse {
   error?: { message?: string };
 }
 
-export const uploadImage = async (image: Buffer, mimeType: string) => {
+// With publicId (full path, e.g. "shop/catalog/rose1") the upload is idempotent: an existing asset
+// is kept and returned instead of creating a duplicate. Without it, Cloudinary names the file.
+export const uploadImage = async (image: Buffer, mimeType: string, options: { publicId?: string } = {}) => {
   if (!isCloudinaryConfigured()) {
     throw new HttpError(503, "Image uploads are not configured on the server");
   }
 
-  const params = { folder, timestamp: String(Math.floor(Date.now() / 1000)) };
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const params: Record<string, string> = options.publicId
+    ? { public_id: options.publicId, overwrite: "false", timestamp }
+    : { folder, timestamp };
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(image)], { type: mimeType }));
   form.append("api_key", apiKey);
-  form.append("folder", params.folder);
-  form.append("timestamp", params.timestamp);
+  for (const [key, value] of Object.entries(params)) {
+    form.append(key, value);
+  }
   form.append("signature", sign(params));
 
   let response: Response;

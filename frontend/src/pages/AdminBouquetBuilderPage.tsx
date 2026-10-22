@@ -4,16 +4,29 @@ import { fetchBuilderOptions, setBuilderOptionAvailability } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
 import { LoadState } from "../components/LoadState";
 import { AdminLayout } from "../components/admin/AdminLayout";
+import { AdminPageHeader, AdminSegments } from "../components/admin/AdminUi";
 import { useApiData } from "../hooks/useApiData";
 import type { Account, AdminBuilderOption, BouquetBuilderSettingTab, BuilderOptionGroup } from "../types/shop";
+import { formatPhpCurrency } from "../utils/currency";
 
-const bouquetBuilderTabs: Array<{ tab: BouquetBuilderSettingTab; group: BuilderOptionGroup }> = [
-  { tab: "Sizes", group: "size" },
-  { tab: "Flower Varieties", group: "flower" },
-  { tab: "Color Palettes", group: "palette" },
-  { tab: "Wrap Style", group: "wrap" },
-  { tab: "Ribbon Design", group: "ribbon" }
-];
+const tabGroups: Record<BouquetBuilderSettingTab, BuilderOptionGroup> = {
+  Sizes: "size",
+  "Flower Varieties": "flower",
+  "Color Palettes": "palette",
+  "Wrap Style": "wrap",
+  "Ribbon Design": "ribbon"
+};
+const tabs = Object.keys(tabGroups) as BouquetBuilderSettingTab[];
+
+const priceLabel = (option: AdminBuilderOption) => {
+  if (option.group === "size") {
+    return `${formatPhpCurrency(option.pricePhp)} base`;
+  }
+  if (option.group === "flower") {
+    return `+${formatPhpCurrency(option.pricePhp)} / stem`;
+  }
+  return "Included";
+};
 
 interface AdminBouquetBuilderPageProps {
   account: Account;
@@ -25,15 +38,18 @@ export const AdminBouquetBuilderPage = ({ account, onLogout, onToast }: AdminBou
   const [activeTab, setActiveTab] = useState<BouquetBuilderSettingTab>("Sizes");
   const [updatingOptionId, setUpdatingOptionId] = useState<string | null>(null);
   const options = useApiData(fetchBuilderOptions, []);
-  const activeGroup = bouquetBuilderTabs.find((entry) => entry.tab === activeTab)?.group ?? "size";
-  const settings = (options.data ?? []).filter((option) => option.group === activeGroup);
+  const allOptions = options.data ?? [];
+  const settings = allOptions.filter((option) => option.group === tabGroups[activeTab]);
+  const liveCounts = Object.fromEntries(
+    tabs.map((tab) => [tab, allOptions.filter((option) => option.group === tabGroups[tab] && option.available).length])
+  ) as Record<BouquetBuilderSettingTab, number>;
 
   const handleToggleAvailability = async (option: AdminBuilderOption) => {
     setUpdatingOptionId(option.id);
     try {
       const updatedOption = await setBuilderOptionAvailability(option.id, !option.available);
       options.updateData((current) => current.map((entry) => (entry.id === option.id ? updatedOption : entry)));
-      onToast(`${updatedOption.name} is now ${updatedOption.available ? "available" : "unavailable"}.`, "success");
+      onToast(`${updatedOption.name} is now ${updatedOption.available ? "shown in" : "hidden from"} the customizer.`, "success");
     } catch (error) {
       onToast(errorMessage(error), "error");
     } finally {
@@ -43,61 +59,60 @@ export const AdminBouquetBuilderPage = ({ account, onLogout, onToast }: AdminBou
 
   return (
     <AdminLayout account={account} onLogout={onLogout}>
-      <div className="admin-page admin-builder-page">
-        <h1>Bouquet Builder Settings</h1>
+      <div className="admin-page admin-products-page">
+        <AdminPageHeader
+          title="Bouquet Builder"
+          subtitle="Choose which options customers can pick when they design their own bouquet."
+        />
 
-        <div className="admin-builder-tabs" role="tablist" aria-label="Bouquet builder setting categories">
-          {bouquetBuilderTabs.map(({ tab }) => (
-            <button
-              type="button"
-              key={tab}
-              className={tab === activeTab ? "active" : ""}
-              role="tab"
-              aria-selected={tab === activeTab}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        <section className="admin-builder-panel" aria-label={`${activeTab} settings`}>
-          {options.data ? (
-            <div className="admin-builder-table-wrap">
-              <table className="admin-builder-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Description</th>
-                    <th>Availability</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {settings.map((setting) => (
-                    <tr key={setting.id}>
-                      <td>{setting.name}</td>
-                      <td>{setting.description}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className={`admin-builder-availability ${setting.available ? "" : "unavailable"}`}
-                          onClick={() => handleToggleAvailability(setting)}
-                          disabled={updatingOptionId === setting.id}
-                          aria-pressed={setting.available}
-                          aria-label={`${setting.name}: ${setting.available ? "available, click to hide from customizer" : "unavailable, click to offer in customizer"}`}
-                        >
-                          {setting.available ? "Available" : "Unavailable"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <LoadState error={options.error} onRetry={options.reload} />
-          )}
+        <section className="admin-products-toolbar admin-ui-toolbar-tabs" aria-label="Option groups">
+          <AdminSegments
+            label="Option group"
+            options={tabs}
+            value={activeTab}
+            onChange={setActiveTab}
+            counts={options.data ? liveCounts : undefined}
+          />
         </section>
+
+        {!options.data ? (
+          <LoadState error={options.error} onRetry={options.reload} />
+        ) : (
+          <section className="admin-ui-panel" aria-label={`${activeTab} options`}>
+            <ul className="admin-ui-option-list">
+              {settings.map((option) => (
+                <li key={option.id} className={option.available ? "" : "is-muted"}>
+                  {option.colors.length > 0 ? (
+                    <span className="admin-ui-swatches" aria-hidden="true">
+                      {option.colors.map((color) => <span key={color} style={{ backgroundColor: color }} />)}
+                    </span>
+                  ) : null}
+                  <div className="admin-ui-option-info">
+                    <strong>
+                      {option.name}
+                      {option.isDefault ? <span className="admin-ui-badge status-neutral">Default</span> : null}
+                    </strong>
+                    <span className="admin-ui-muted">{option.description}</span>
+                  </div>
+                  <span className="admin-ui-option-price">{priceLabel(option)}</span>
+                  <label className="admin-product-switch admin-ui-option-switch">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={option.available}
+                      disabled={updatingOptionId === option.id}
+                      onChange={() => handleToggleAvailability(option)}
+                      aria-label={`Offer ${option.name} in the customizer`}
+                    />
+                    <span className="admin-product-switch-track" aria-hidden="true" />
+                    <small>{option.available ? "Shown" : "Hidden"}</small>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <p className="admin-ui-panel-note">Hidden options don't appear in the customer customizer. Each group keeps at least one option.</p>
+          </section>
+        )}
       </div>
     </AdminLayout>
   );
