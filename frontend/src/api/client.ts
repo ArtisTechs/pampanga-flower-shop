@@ -73,6 +73,10 @@ export const apiRequest = async <T>(
   }
 
   const data: unknown = await response.json().catch(() => null);
+  // A non-JSON reply (e.g. the static host's HTML or 404 page) means no API is answering at this URL.
+  if (data === null) {
+    throw new ApiError(503, "The shop server isn't available right now. Please try again later.");
+  }
   if (!response.ok) {
     const message = typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
       ? data.error
