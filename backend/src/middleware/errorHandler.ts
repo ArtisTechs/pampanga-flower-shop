@@ -1,9 +1,11 @@
 import type { ErrorRequestHandler, RequestHandler } from "express";
 
 export class HttpError extends Error {
+  // field names the request input the error is about, so forms can show it under that input.
   constructor(
     public readonly status: number,
-    message: string
+    message: string,
+    public readonly field?: string
   ) {
     super(message);
   }
@@ -16,7 +18,7 @@ export const notFound: RequestHandler = (_req, res) => {
 // Express 5 forwards rejected async handlers here automatically.
 export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   if (error instanceof HttpError) {
-    res.status(error.status).json({ error: error.message });
+    res.status(error.status).json(error.field ? { error: error.message, field: error.field } : { error: error.message });
     return;
   }
 

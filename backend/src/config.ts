@@ -20,6 +20,13 @@ export const config = {
     apiSecret: process.env.CLOUDINARY_API_SECRET ?? "",
     folder: process.env.CLOUDINARY_FOLDER ?? "pampanga-flower-shop/products"
   },
+  // Optional: OTP emails go through Brevo. Without a key, development logs codes to the console
+  // and production answers 503.
+  mail: {
+    brevoApiKey: process.env.BREVO_API_KEY ?? "",
+    fromEmail: process.env.MAIL_FROM_EMAIL ?? "",
+    fromName: process.env.MAIL_FROM_NAME ?? "Pampanga Flower Shop"
+  },
   db: {
     host: required("DB_HOST"),
     port: Number(process.env.DB_PORT ?? 3306),

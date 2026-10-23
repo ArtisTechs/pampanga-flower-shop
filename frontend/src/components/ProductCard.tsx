@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
+import { MAX_ITEM_QUANTITY } from "../hooks/useCart";
 import type { ProductItem } from "../types/shop";
 import { formatPhpCurrency } from "../utils/currency";
 
@@ -50,12 +51,12 @@ export const ProductCard = ({ product, onAddToCart }: ProductCardProps) => {
       <div className="product-card-body">
         <h3>{product.name}</h3>
         {product.description ? <p className="product-description">{product.description}</p> : null}
-        <p className="product-price">{formatPhpCurrency(product.pricePhp)} PHP</p>
+        <p className="product-price">{formatPhpCurrency(product.pricePhp)}</p>
       </div>
       <div className="qty" aria-label={quantityLabel}>
         <button type="button" onClick={() => setQty((prev) => Math.max(prev - 1, 0))} aria-label={decreaseLabel}>-</button>
         <span>{qty}</span>
-        <button type="button" onClick={() => setQty((prev) => prev + 1)} aria-label={increaseLabel}>+</button>
+        <button type="button" onClick={() => setQty((prev) => Math.min(prev + 1, MAX_ITEM_QUANTITY))} aria-label={increaseLabel}>+</button>
       </div>
       <button
         type="button"

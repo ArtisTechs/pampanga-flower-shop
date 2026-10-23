@@ -19,7 +19,7 @@ INSERT IGNORE INTO home_steps (id, icon, description, sort_order) VALUES
 -- Text wrapped in *asterisks* is rendered as the highlighted (italic/pink) part of a heading.
 INSERT IGNORE INTO site_settings (setting_key, setting_value) VALUES
   ('heroTagline', 'Handcrafted with love in Pampanga'),
-  ('heroSecondaryCta', 'Why Pampanga Flowershop?'),
+  ('heroSecondaryCta', 'About Us'),
   ('occasionsHeading', 'Bouquets for *Every Occasion*'),
   ('flowerTypesHeading', 'Browse by Flower Type'),
   ('featuresHeading', 'Features'),
@@ -36,6 +36,10 @@ INSERT IGNORE INTO site_settings (setting_key, setting_value) VALUES
 -- The banner title now marks its highlighted words explicitly (only if the admin hasn't changed it).
 UPDATE site_settings SET setting_value = 'Create Your *Dream Bouquet*'
 WHERE setting_key = 'bannerTitle' AND setting_value = 'Create Your Dream Bouquet';
+
+-- Hero secondary button renamed (only if the admin hasn't changed it).
+UPDATE site_settings SET setting_value = 'About Us'
+WHERE setting_key = 'heroSecondaryCta' AND setting_value = 'Why Pampanga Flowershop?';
 
 -- Customizer starting choices, only for groups that don't have a default yet.
 UPDATE builder_options AS option_row

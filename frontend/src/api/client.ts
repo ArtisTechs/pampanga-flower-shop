@@ -4,10 +4,13 @@ const TOKEN_KEY = "authToken";
 
 export class ApiError extends Error {
   readonly status: number;
+  // The request input the error is about (e.g. "email"), when the API names one.
+  readonly field?: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, field?: string) {
     super(message);
     this.status = status;
+    this.field = field;
   }
 }
 
@@ -81,7 +84,10 @@ export const apiRequest = async <T>(
     const message = typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
       ? data.error
       : `Request failed (${response.status})`;
-    throw new ApiError(response.status, message);
+    const field = typeof data === "object" && data !== null && "field" in data && typeof data.field === "string"
+      ? data.field
+      : undefined;
+    throw new ApiError(response.status, message, field);
   }
   return data as T;
 };

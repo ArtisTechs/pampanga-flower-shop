@@ -1,65 +1,282 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { NavLink } from "react-router";
-import { errorMessage } from "../api/client";
-import type { RegisterInput } from "../types/shop";
+import { ApiError, errorMessage } from "../api/client";
+import { requestOtp } from "../api/shop";
+import type { OtpPurpose, RegisterInput, ResetPasswordInput } from "../types/shop";
+import {
+  validateContactNumber,
+  validateEmail,
+  validateFullName,
+  validateNewPassword,
+  validateOtpCode,
+  validatePasswordMatch
+} from "../utils/validation";
 
 interface LoginOverlayProps {
   shopName: string;
   onLogin: (email: string, password: string) => Promise<void>;
   onRegister: (input: RegisterInput) => Promise<void>;
+  onResetPassword: (input: ResetPasswordInput) => Promise<void>;
   onToast: (message: string, tone: "success" | "error") => void;
 }
 
-export const LoginOverlay = ({ shopName, onLogin, onRegister, onToast }: LoginOverlayProps) => {
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+type AuthMode = "signin" | "signup" | "reset";
+type FieldName = "fullName" | "email" | "password" | "confirmPassword" | "contactNumber" | "code";
+type FormErrors = Partial<Record<FieldName | "form", string>>;
+
+const FIELD_NAMES: FieldName[] = ["fullName", "email", "password", "confirmPassword", "contactNumber", "code"];
+const RESEND_COOLDOWN_SECONDS = 60;
+
+const TITLES: Record<AuthMode, string> = {
+  signin: "Login",
+  signup: "Create Account",
+  reset: "Reset Password"
+};
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+interface LoginFieldProps extends InputHTMLAttributes<HTMLInputElement> {
+  name: FieldName;
+  error?: string;
+  hint?: string;
+  action?: ReactNode;
+}
+
+// Input with its error (or hint) shown directly underneath.
+const LoginField = ({ name, error, hint, action, ...inputProps }: LoginFieldProps) => {
+  const messageId = `login-${name}-message`;
+
+  return (
+    <div className="login-field">
+      <div className={action ? "login-field-row" : undefined}>
+        <input
+          name={name}
+          aria-label={inputProps.placeholder}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error || hint ? messageId : undefined}
+          {...inputProps}
+        />
+        {action}
+      </div>
+      {error ? (
+        <p id={messageId} className="field-error" role="alert">{error}</p>
+      ) : hint ? (
+        <p id={messageId} className="field-hint">{hint}</p>
+      ) : null}
+    </div>
+  );
+};
+
+export const LoginOverlay = ({ shopName, onLogin, onRegister, onResetPassword, onToast }: LoginOverlayProps) => {
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [contactNumber, setContactNumber] = useState("");
+  const [code, setCode] = useState("");
+  const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [codeSentTo, setCodeSentTo] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+  // A code only counts for the address it was sent to.
+  const isCodeSent = codeSentTo !== null && codeSentTo === normalizeEmail(email);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  useEffect(() => {
+    if (cooldown <= 0) {
+      return undefined;
+    }
 
-    if (isSubmitting) {
+    const timeoutId = window.setTimeout(() => setCooldown((seconds) => seconds - 1), 1000);
+    return () => window.clearTimeout(timeoutId);
+  }, [cooldown]);
+
+  const updateField = (field: FieldName, setter: (value: string) => void) => (value: string) => {
+    setter(value);
+    setErrors((current) => (current[field] || current.form ? { ...current, [field]: undefined, form: undefined } : current));
+  };
+
+  const switchMode = (mode: AuthMode) => {
+    setAuthMode(mode);
+    setPassword("");
+    setConfirmPassword("");
+    setCode("");
+    setCodeSentTo(null);
+    setErrors({});
+  };
+
+  // Shows an API error under the input it names, otherwise under the submit button.
+  const showApiError = (error: unknown) => {
+    const field = error instanceof ApiError ? error.field : undefined;
+    const message = errorMessage(error);
+    setErrors(field && FIELD_NAMES.includes(field as FieldName) ? { [field]: message } : { form: message });
+  };
+
+  const hasErrors = (nextErrors: FormErrors) => {
+    setErrors(nextErrors);
+    return Object.values(nextErrors).some(Boolean);
+  };
+
+  const handleSendCode = async (purpose: OtpPurpose) => {
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setErrors({ email: emailError });
       return;
     }
 
-    if (authMode === "signup") {
-      if (!fullName || !password || !confirmPassword || !email || !contactNumber) {
-        onToast("Please complete all fields.", "error");
-        return;
-      }
-
-      if (password !== confirmPassword) {
-        onToast("Passwords do not match.", "error");
-        return;
-      }
-
-      setIsSubmitting(true);
-      try {
-        await onRegister({ fullName: fullName.trim(), email: email.trim(), password, contactNumber: contactNumber.trim() });
-        onToast("Account created successfully. Welcome!", "success");
-      } catch (error) {
-        onToast(errorMessage(error), "error");
-        setIsSubmitting(false);
-      }
-      return;
+    setIsSendingCode(true);
+    setErrors({});
+    try {
+      await requestOtp(email.trim(), purpose);
+      setCodeSentTo(normalizeEmail(email));
+      setCode("");
+      setCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch (error) {
+      showApiError(error);
+    } finally {
+      setIsSendingCode(false);
     }
+  };
 
+  const validateCodeField = () => (isCodeSent ? validateOtpCode(code) : "Send a code to your email first");
+
+  const submit = async (action: () => Promise<void>, successMessage: string) => {
     setIsSubmitting(true);
     try {
-      await onLogin(email, password);
-      onToast("Logged in successfully.", "success");
+      await action();
+      onToast(successMessage, "success");
     } catch (error) {
-      onToast(errorMessage(error), "error");
+      showApiError(error);
       setIsSubmitting(false);
     }
   };
 
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (isSubmitting || isSendingCode) {
+      return;
+    }
+
+    if (authMode === "signin") {
+      if (hasErrors({ email: validateEmail(email), password: password ? undefined : "Password is required" })) {
+        return;
+      }
+      await submit(() => onLogin(email.trim(), password), "Logged in successfully.");
+      return;
+    }
+
+    if (authMode === "signup") {
+      const nextErrors: FormErrors = {
+        fullName: validateFullName(fullName),
+        email: validateEmail(email),
+        code: validateEmail(email) ? undefined : validateCodeField(),
+        contactNumber: validateContactNumber(contactNumber),
+        password: validateNewPassword(password),
+        confirmPassword: validatePasswordMatch(password, confirmPassword)
+      };
+      if (hasErrors(nextErrors)) {
+        return;
+      }
+      await submit(
+        () => onRegister({
+          fullName: fullName.trim(),
+          email: email.trim(),
+          password,
+          contactNumber: contactNumber.trim(),
+          code: code.trim()
+        }),
+        "Account created successfully. Welcome!"
+      );
+      return;
+    }
+
+    // Reset: the first step only sends the code.
+    if (!isCodeSent) {
+      await handleSendCode("reset");
+      return;
+    }
+
+    const nextErrors: FormErrors = {
+      email: validateEmail(email),
+      code: validateCodeField(),
+      password: validateNewPassword(password),
+      confirmPassword: validatePasswordMatch(password, confirmPassword)
+    };
+    if (hasErrors(nextErrors)) {
+      return;
+    }
+    await submit(
+      () => onResetPassword({ email: email.trim(), code: code.trim(), password }),
+      "Password updated. You're now signed in."
+    );
+  };
+
+  const sendCodeButton = (purpose: OtpPurpose) => (
+    <button
+      type="button"
+      className="otp-send-btn"
+      onClick={() => void handleSendCode(purpose)}
+      disabled={isSendingCode || isSubmitting || (isCodeSent && cooldown > 0)}
+    >
+      {isSendingCode
+        ? "Sending..."
+        : isCodeSent
+          ? cooldown > 0 ? `Resend in ${cooldown}s` : "Resend code"
+          : "Send code"}
+    </button>
+  );
+
+  const codeField = (
+    <LoginField
+      name="code"
+      type="text"
+      inputMode="numeric"
+      autoComplete="one-time-code"
+      maxLength={6}
+      value={code}
+      onChange={(event) => updateField("code", setCode)(event.target.value.replace(/\D/g, ""))}
+      placeholder="6-digit code"
+      error={errors.code}
+      hint={isCodeSent ? `We sent a code to ${email.trim()}. It expires in 10 minutes; check your spam folder too.` : undefined}
+    />
+  );
+
+  const newPasswordFields = (
+    <>
+      <LoginField
+        name="password"
+        type="password"
+        autoComplete="new-password"
+        value={password}
+        onChange={(event) => updateField("password", setPassword)(event.target.value)}
+        placeholder={authMode === "reset" ? "New Password" : "Password"}
+        error={errors.password}
+        hint="At least 8 characters, with a letter and a number."
+      />
+      <LoginField
+        name="confirmPassword"
+        type="password"
+        autoComplete="new-password"
+        value={confirmPassword}
+        onChange={(event) => updateField("confirmPassword", setConfirmPassword)(event.target.value)}
+        placeholder="Confirm Password"
+        error={errors.confirmPassword}
+      />
+    </>
+  );
+
+  const submitLabel = isSubmitting || (authMode === "reset" && isSendingCode)
+    ? "Please wait..."
+    : authMode === "signin"
+      ? "Sign in"
+      : authMode === "signup"
+        ? "Sign up"
+        : isCodeSent ? "Reset password" : "Send code";
+
   return (
-    <div className="login-overlay" role="dialog" aria-modal="true" aria-label="Login">
+    <div className="login-overlay" role="dialog" aria-modal="true" aria-label={TITLES[authMode]}>
       <header className="login-topbar">
         <div className="login-topbar-inner">
           <NavLink to="/" className="logo">{shopName}</NavLink>
@@ -80,32 +297,106 @@ export const LoginOverlay = ({ shopName, onLogin, onRegister, onToast }: LoginOv
       </header>
       <div className="login-container">
         <div className="login-box">
-          <h1>{authMode === "signin" ? "Login" : "Create Account"}</h1>
-          <form className={`login-form ${authMode === "signup" ? "signup-form" : ""}`} onSubmit={handleSubmit}>
+          <h1>{TITLES[authMode]}</h1>
+          {authMode === "reset" ? (
+            <p className="login-intro">
+              {isCodeSent
+                ? "Enter the code from your email and choose a new password."
+                : "Enter your account email and we'll send you a 6-digit code."}
+            </p>
+          ) : null}
+          <form
+            className={`login-form ${authMode === "signup" ? "signup-form" : ""}`}
+            onSubmit={handleSubmit}
+            noValidate
+          >
             {authMode === "signup" ? (
               <>
-                <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter Full Name" required aria-label="Enter Full Name" />
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required aria-label="Password" />
-                <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm Password" required aria-label="Confirm Password" />
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required aria-label="Email" />
-                <input type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="Contact No." required aria-label="Contact No." />
+                <LoginField
+                  name="fullName"
+                  type="text"
+                  autoComplete="name"
+                  value={fullName}
+                  onChange={(event) => updateField("fullName", setFullName)(event.target.value)}
+                  placeholder="Enter Full Name"
+                  error={errors.fullName}
+                />
+                <LoginField
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => updateField("email", setEmail)(event.target.value)}
+                  placeholder="Email"
+                  error={errors.email}
+                  action={sendCodeButton("signup")}
+                />
+                {codeField}
+                <LoginField
+                  name="contactNumber"
+                  type="tel"
+                  autoComplete="tel"
+                  value={contactNumber}
+                  onChange={(event) => updateField("contactNumber", setContactNumber)(event.target.value)}
+                  placeholder="Contact No."
+                  error={errors.contactNumber}
+                />
+                {newPasswordFields}
+              </>
+            ) : authMode === "reset" ? (
+              <>
+                <LoginField
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => updateField("email", setEmail)(event.target.value)}
+                  placeholder="Email"
+                  error={errors.email}
+                  action={isCodeSent ? sendCodeButton("reset") : undefined}
+                />
+                {isCodeSent ? (
+                  <>
+                    {codeField}
+                    {newPasswordFields}
+                  </>
+                ) : null}
               </>
             ) : (
               <>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required aria-label="Email" />
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required aria-label="Password" />
-                <a href="#" className="forgot-link">Forgot your password?</a>
+                <LoginField
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => updateField("email", setEmail)(event.target.value)}
+                  placeholder="Email"
+                  error={errors.email}
+                />
+                <LoginField
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => updateField("password", setPassword)(event.target.value)}
+                  placeholder="Password"
+                  error={errors.password}
+                />
+                <button type="button" className="forgot-link" onClick={() => switchMode("reset")}>
+                  Forgot your password?
+                </button>
               </>
             )}
-            <button type="submit" className="login-btn" disabled={isSubmitting}>
-              {isSubmitting ? "Please wait..." : authMode === "signin" ? "Sign in" : "Sign up"}
+            <button type="submit" className="login-btn" disabled={isSubmitting || isSendingCode}>
+              {submitLabel}
             </button>
+            {errors.form ? <p className="field-error form-error" role="alert">{errors.form}</p> : null}
           </form>
           <div className="login-footer">
             <button
               type="button"
               className="auth-switch-btn"
-              onClick={() => setAuthMode(authMode === "signin" ? "signup" : "signin")}
+              onClick={() => switchMode(authMode === "signin" ? "signup" : "signin")}
             >
               {authMode === "signin" ? "Create account" : "Already have an account? Sign in"}
             </button>

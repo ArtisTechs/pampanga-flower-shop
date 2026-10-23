@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, clearAuthToken, getAuthToken, isAuthTokenKey, setAuthToken } from "../api/client";
-import { fetchMe, loginRequest, logoutRequest, registerRequest } from "../api/shop";
-import type { Account, RegisterInput } from "../types/shop";
+import { fetchMe, loginRequest, logoutRequest, registerRequest, resetPasswordRequest } from "../api/shop";
+import type { Account, RegisterInput, ResetPasswordInput } from "../types/shop";
 
 export const useAuth = () => {
   const [currentAccount, setCurrentAccount] = useState<Account | null>(null);
@@ -70,6 +70,13 @@ export const useAuth = () => {
     return account;
   };
 
+  const resetPassword = async (input: ResetPasswordInput) => {
+    const { token, account } = await resetPasswordRequest(input);
+    setAuthToken(token);
+    setCurrentAccount(account);
+    return account;
+  };
+
   const logout = () => {
     // logoutRequest reads the token before it is cleared below; a failed request only leaves an expiring session.
     void logoutRequest().catch(() => undefined);
@@ -77,5 +84,5 @@ export const useAuth = () => {
     setCurrentAccount(null);
   };
 
-  return { currentAccount, isAuthLoading, isLoggedIn: currentAccount !== null, login, register, logout };
+  return { currentAccount, isAuthLoading, isLoggedIn: currentAccount !== null, login, register, resetPassword, logout };
 };

@@ -102,7 +102,7 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePagePr
 
       <section className="occasion-section reveal-on-scroll" id="occasions">
         <div className="title reveal-on-scroll">
-          <h1><EmphasisText text={text("occasionsHeading")} /></h1>
+          <h2><EmphasisText text={text("occasionsHeading")} /></h2>
         </div>
         <div className="grid occasion-grid">
           {!home.data ? <LoadState error={home.error} onRetry={home.reload} /> : null}
@@ -127,7 +127,7 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePagePr
       </section>
 
       <section className="flower-type-section reveal-on-scroll" id="flower-types">
-        <div className="fts-title-section reveal-on-scroll"><h1><EmphasisText text={text("flowerTypesHeading")} /></h1></div>
+        <div className="fts-title-section reveal-on-scroll"><h2><EmphasisText text={text("flowerTypesHeading")} /></h2></div>
         <div className="fts-grid">
           {flowerTypeCards.map((card, index) => (
             <Link

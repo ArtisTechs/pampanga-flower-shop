@@ -174,6 +174,16 @@ export interface RegisterInput {
   email: string;
   password: string;
   contactNumber: string;
+  // 6-digit code emailed by requestOtp(email, "signup").
+  code: string;
+}
+
+export type OtpPurpose = "signup" | "reset";
+
+export interface ResetPasswordInput {
+  email: string;
+  code: string;
+  password: string;
 }
 
 export interface AdminDashboardStat {
@@ -205,15 +215,32 @@ export interface AdminOrder {
 export interface AdminOrderDetail extends AdminOrder {
   createdAt: string;
   customerEmail: string | null;
-  items: Array<{
-    id: number;
-    name: string;
-    unitPricePhp: number;
-    quantity: number;
-    image: string | null;
-    customization: { size: string; palette: string; wrap: string; ribbon: string } | null;
-    flowers: Array<{ name: string; quantity: number }>;
-  }>;
+  items: OrderItemDetail[];
+}
+
+export interface OrderItemDetail {
+  id: number;
+  name: string;
+  unitPricePhp: number;
+  quantity: number;
+  image: string | null;
+  customization: { size: string; palette: string; wrap: string; ribbon: string } | null;
+  flowers: Array<{ name: string; quantity: number }>;
+}
+
+/** An order as its customer sees it in My Orders. */
+export interface CustomerOrder {
+  id: string;
+  pickupAt: string;
+  createdAt: string;
+  totalPhp: number;
+  status: AdminOrderStatus;
+  itemCount: number;
+  itemNames: string[];
+}
+
+export interface CustomerOrderDetail extends CustomerOrder {
+  items: OrderItemDetail[];
 }
 
 export interface AdminDashboard {

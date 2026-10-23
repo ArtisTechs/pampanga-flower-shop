@@ -38,7 +38,7 @@ export const CheckoutPage = ({ account, items, siteContent, onOrderPlaced }: Che
   const ribbonNames = uniqueNames(orderItems.map((item) => item.custom?.ribbonName));
   const minPickupValue = useMemo(() => toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)), []);
   const subtotal = orderItems.reduce((total, item) => total + item.quantity * item.pricePhp, 0);
-  const primaryItem = orderItems[0];
+  const itemCount = orderItems.reduce((total, item) => total + item.quantity, 0);
   const flowerLines = useMemo(
     () => orderItems.map((item) => ({
       id: item.id,
@@ -114,9 +114,9 @@ export const CheckoutPage = ({ account, items, siteContent, onOrderPlaced }: Che
 
       <div className="order-summary-panel">
         <div className="order-summary-section">
-          <h2>Your Bouquet</h2>
+          <h2>{orderItems.length === 1 ? "Your Bouquet" : "Your Bouquets"}</h2>
           <p className="order-base-price">
-            Base price{primaryItem ? ` (${primaryItem.name})` : ""}: {formatPhpCurrency(primaryItem?.pricePhp ?? subtotal)}
+            {itemCount} item{itemCount === 1 ? "" : "s"}
           </p>
           <div className="order-line-list">
             {flowerLines.map((line) => (
@@ -221,6 +221,7 @@ export const CheckoutPage = ({ account, items, siteContent, onOrderPlaced }: Che
         {placedOrder ? (
           <div className="order-success-message" role="status">
             Successful order. We will prepare your bouquet for pick-up. Total due on pick-up: {formatPhpCurrency(placedOrder.totalPhp)}
+            {" "}<Link to="/orders" className="order-track-link">Track your order</Link>
           </div>
         ) : null}
 

@@ -232,6 +232,14 @@ export const SiteHeader = ({
           </button>
           {showLogout && onLogout && isUserMenuOpen ? (
               <div className="profile-menu" role="menu">
+                <NavLink
+                  to="/orders"
+                  className="profile-menu-item"
+                  role="menuitem"
+                  onClick={() => setIsUserMenuOpen(false)}
+                >
+                  My Orders
+                </NavLink>
                 <button
                   type="button"
                   className="profile-menu-item"

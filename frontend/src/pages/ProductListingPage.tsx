@@ -26,13 +26,16 @@ export const ProductListingPage = ({ onAddToCart }: ProductListingPageProps) => 
     }
   }, [route]);
   const activeFilterId = searchParams.get("filter");
-  const filters = (listing.data?.filters ?? []).map((filter) => ({
-    ...filter,
-    route: `${route}?filter=${filter.id}`,
-    isActive: filter.id === activeFilterId
-  }));
-  const activeFilter = filters.find((filter) => filter.isActive);
   const products = listing.data?.products ?? [];
+  // Only offer filter tabs that would show at least one product.
+  const filters = (listing.data?.filters ?? [])
+    .filter((filter) => products.some((product) => product.catalogFilters?.includes(filter.id)))
+    .map((filter) => ({
+      ...filter,
+      route: `${route}?filter=${filter.id}`,
+      isActive: filter.id === activeFilterId
+    }));
+  const activeFilter = filters.find((filter) => filter.isActive);
   const displayedProducts = activeFilter
     ? products.filter((product) => product.catalogFilters?.includes(activeFilter.id))
     : products;

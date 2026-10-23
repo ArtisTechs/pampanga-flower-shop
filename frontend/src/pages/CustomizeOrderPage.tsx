@@ -264,7 +264,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
             <h1 id="customize-order-title">Customize</h1>
             <p>Make it uniquely yours</p>
           </div>
-          <strong>{formatPhpCurrency(totalPrice)} PHP</strong>
+          <strong>{formatPhpCurrency(totalPrice)}</strong>
         </header>
 
         <div className="customize-order-divider" />
@@ -293,7 +293,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                     aria-pressed={selectedSize === size.id}
                   >
                     <span>{size.name}</span>
-                    <strong>{formatPhpCurrency(size.pricePhp)} PHP</strong>
+                    <strong>{formatPhpCurrency(size.pricePhp)}</strong>
                   </button>
                 ))}
               </div>
@@ -310,7 +310,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                     <span className="flower-dot" style={{ backgroundColor: flower.colors[0] }} aria-hidden="true" />
                     <div>
                       <strong>{flower.name}</strong>
-                      <span>+{flower.pricePhp} PHP per pc</span>
+                      <span>+{formatPhpCurrency(flower.pricePhp)} per pc</span>
                     </div>
                     <div className="flower-stepper" aria-label={`${flower.name} quantity`}>
                       <button type="button" onClick={() => updateFlowerCount(flower.id, -1)} aria-label={`Remove ${flower.name}`}>
@@ -402,7 +402,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                 <span>{selectedPaletteOption.name}</span>
                 <span>{selectedWrapOption.name}</span>
                 <span>{selectedRibbonOption.name}</span>
-                <strong>{formatPhpCurrency(totalPrice)} PHP</strong>
+                <strong>{formatPhpCurrency(totalPrice)}</strong>
               </div>
               <div className="custom-preview-actions">
                 <button type="button" className="custom-preview-cancel" onClick={() => setStep("style")}>

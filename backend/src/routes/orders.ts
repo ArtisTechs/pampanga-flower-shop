@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import { loadBuilderOptions, loadBuilderPreviews, type BuilderGroup, type BuilderOption } from "../db/builder.js";
+import { loadOrderItems } from "../db/orders.js";
 import { pool } from "../db/pool.js";
 import { currentUser, requireAuth } from "../middleware/auth.js";
 import { HttpError } from "../middleware/errorHandler.js";
@@ -93,7 +94,59 @@ const buildCustomLine = (
   };
 };
 
+interface MyOrderRow extends RowDataPacket {
+  id: string;
+  pickup_at: Date;
+  created_at: Date;
+  total_php: number;
+  status: "Pending" | "Ready" | "Completed";
+  item_count: number;
+  item_names: string | null;
+}
+
+// Shape matches CustomerOrder in frontend/src/types/shop.ts.
+const toCustomerOrder = (row: MyOrderRow) => ({
+  id: row.id,
+  pickupAt: row.pickup_at.toISOString(),
+  createdAt: row.created_at.toISOString(),
+  totalPhp: row.total_php,
+  status: row.status,
+  itemCount: Number(row.item_count),
+  itemNames: row.item_names ? row.item_names.split("\n") : []
+});
+
+const MY_ORDER_SELECT = `
+  SELECT o.id, o.pickup_at, o.created_at, o.total_php, o.status,
+         COALESCE(SUM(oi.quantity), 0) AS item_count,
+         GROUP_CONCAT(oi.product_name ORDER BY oi.id SEPARATOR '\\n') AS item_names
+  FROM orders o
+  LEFT JOIN order_items oi ON oi.order_id = o.id`;
+
 export const ordersRouter = Router();
+
+// The logged-in customer's own orders, newest first.
+ordersRouter.get("/", requireAuth, async (_req, res) => {
+  const user = currentUser(res);
+  const [rows] = await pool.query<MyOrderRow[]>(
+    `${MY_ORDER_SELECT} WHERE o.user_id = ? GROUP BY o.id ORDER BY o.created_at DESC`,
+    [user.id]
+  );
+  res.json(rows.map(toCustomerOrder));
+});
+
+// Another customer's order is reported as not found, so order ids can't be probed.
+ordersRouter.get("/:id", requireAuth, async (req, res) => {
+  const user = currentUser(res);
+  const id = requireId(req.params.id, "order");
+  const [rows] = await pool.query<MyOrderRow[]>(
+    `${MY_ORDER_SELECT} WHERE o.id = ? AND o.user_id = ? GROUP BY o.id`,
+    [id, user.id]
+  );
+  if (rows.length === 0) {
+    throw new HttpError(404, "Order not found");
+  }
+  res.json({ ...toCustomerOrder(rows[0]), items: await loadOrderItems(id) });
+});
 
 ordersRouter.post("/", requireAuth, async (req, res) => {
   const user = currentUser(res);

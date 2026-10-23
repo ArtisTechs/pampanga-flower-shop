@@ -1,13 +1,15 @@
 import { Link } from "react-router";
+import { MAX_ITEM_QUANTITY } from "../hooks/useCart";
 import type { CartItem } from "../types/shop";
 import { formatPhpCurrency } from "../utils/currency";
 
 interface CartPageProps {
   items: CartItem[];
   onRemoveItem: (productId: string) => void;
+  onUpdateQuantity: (productId: string, quantity: number) => void;
 }
 
-export const CartPage = ({ items, onRemoveItem }: CartPageProps) => {
+export const CartPage = ({ items, onRemoveItem, onUpdateQuantity }: CartPageProps) => {
   const totalItems = items.reduce((total, item) => total + item.quantity, 0);
   const totalPrice = items.reduce((total, item) => total + item.quantity * item.pricePhp, 0);
 
@@ -31,13 +33,31 @@ export const CartPage = ({ items, onRemoveItem }: CartPageProps) => {
                 <img src={item.image} alt={item.name} />
                 <div>
                   <h2>{item.name}</h2>
-                  <p>{formatPhpCurrency(item.pricePhp)} PHP</p>
+                  <p>{formatPhpCurrency(item.pricePhp)}</p>
                 </div>
                 <div className="cart-item-quantity">
                   <span>Qty</span>
-                  <strong>{item.quantity}</strong>
+                  <div className="cart-qty-stepper" aria-label={`Quantity for ${item.name}`}>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                      disabled={item.quantity <= 1}
+                      aria-label={`Decrease ${item.name}`}
+                    >
+                      -
+                    </button>
+                    <strong>{item.quantity}</strong>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                      disabled={item.quantity >= MAX_ITEM_QUANTITY}
+                      aria-label={`Increase ${item.name}`}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
-                <strong className="cart-item-total">{formatPhpCurrency(item.pricePhp * item.quantity)} PHP</strong>
+                <strong className="cart-item-total">{formatPhpCurrency(item.pricePhp * item.quantity)}</strong>
                 <button
                   type="button"
                   className="cart-remove-btn"
@@ -58,7 +78,7 @@ export const CartPage = ({ items, onRemoveItem }: CartPageProps) => {
           <div className="cart-summary">
             <div>
               <span>{totalItems} item{totalItems === 1 ? "" : "s"}</span>
-              <strong>{formatPhpCurrency(totalPrice)} PHP</strong>
+              <strong>{formatPhpCurrency(totalPrice)}</strong>
             </div>
             <Link to="/checkout" className="checkout-button">
               Checkout

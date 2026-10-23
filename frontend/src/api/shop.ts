@@ -13,13 +13,17 @@ import type {
   BuilderConfig,
   CatalogCollection,
   CatalogListing,
+  CustomerOrder,
+  CustomerOrderDetail,
   HomeContent,
   InventoryItem,
+  OtpPurpose,
   PlacedOrder,
   ProductCategory,
   ProductItem,
   RegisterInput,
   ReportRange,
+  ResetPasswordInput,
   SiteContent
 } from "../types/shop";
 import { resolveImagePath } from "../utils/assets";
@@ -66,6 +70,16 @@ export type OrderItemInput =
 export const placeOrder = (input: { pickupAt: string; items: OrderItemInput[] }) =>
   apiRequest<PlacedOrder>("/orders", { method: "POST", body: input });
 
+export const fetchMyOrders = () => apiRequest<CustomerOrder[]>("/orders");
+
+export const fetchMyOrder = async (orderId: string) => {
+  const order = await apiRequest<CustomerOrderDetail>(`/orders/${encodeURIComponent(orderId)}`);
+  return {
+    ...order,
+    items: order.items.map((item) => ({ ...item, image: item.image ? resolveImagePath(item.image, 200) : null }))
+  };
+};
+
 // Auth
 
 interface AuthResponse {
@@ -78,6 +92,12 @@ export const loginRequest = (email: string, password: string) =>
 
 export const registerRequest = (input: RegisterInput) =>
   apiRequest<AuthResponse>("/auth/register", { method: "POST", body: input });
+
+export const requestOtp = (email: string, purpose: OtpPurpose) =>
+  apiRequest<{ message: string }>("/auth/otp", { method: "POST", body: { email, purpose } });
+
+export const resetPasswordRequest = (input: ResetPasswordInput) =>
+  apiRequest<AuthResponse>("/auth/password/reset", { method: "POST", body: input });
 
 export const fetchMe = async () => (await apiRequest<{ account: Account }>("/auth/me")).account;
 

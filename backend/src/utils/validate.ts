@@ -25,6 +25,39 @@ export const requireEmail = (value: unknown) => {
   return email;
 };
 
+// Rules for passwords being set (sign-up, reset). Login still accepts older, shorter passwords.
+export const requireNewPassword = (value: unknown) => {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new HttpError(400, "Password is required");
+  }
+  if (value.length < 8 || value.length > 200) {
+    throw new HttpError(400, "Password must be 8-200 characters");
+  }
+  if (!/[a-z]/i.test(value) || !/\d/.test(value)) {
+    throw new HttpError(400, "Password must include at least one letter and one number");
+  }
+  return value;
+};
+
+export const requireOtpCode = (value: unknown) => {
+  if (typeof value !== "string" || !/^\d{6}$/.test(value.trim())) {
+    throw new HttpError(400, "Enter the 6-digit code from your email");
+  }
+  return value.trim();
+};
+
+// Tags validation errors with the input they belong to (see HttpError.field).
+export const forField = <T>(field: string, validate: () => T): T => {
+  try {
+    return validate();
+  } catch (error) {
+    if (error instanceof HttpError && !error.field) {
+      throw new HttpError(error.status, error.message, field);
+    }
+    throw error;
+  }
+};
+
 export const requireContactNumber = (value: unknown) => {
   const contact = requireString(value, "Contact number", 32);
   if (!/^[0-9+()\s-]{7,32}$/.test(contact)) {

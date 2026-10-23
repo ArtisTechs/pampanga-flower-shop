@@ -40,6 +40,10 @@ services:
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
       CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER:-pampanga-flower-shop/products}
+      # OTP emails; leave empty to print codes in the backend logs instead.
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Pampanga Flower Shop}
       # File-change events don't cross Windows/macOS bind mounts reliably.
       CHOKIDAR_USEPOLLING: "true"
     ports:

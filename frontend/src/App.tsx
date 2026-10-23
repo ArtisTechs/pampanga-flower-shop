@@ -8,8 +8,9 @@ import { siteNavItems } from "./components/siteNavigation";
 import { fetchSiteContent } from "./api/shop";
 import { useApiData } from "./hooks/useApiData";
 import { useAuth } from "./hooks/useAuth";
+import { useCart } from "./hooks/useCart";
 import { useRevealOnScroll } from "./hooks/useRevealOnScroll";
-import type { CartItem, ProductItem, RegisterInput } from "./types/shop";
+import type { ProductItem, RegisterInput, ResetPasswordInput } from "./types/shop";
 import { AdminBouquetBuilderPage } from "./pages/AdminBouquetBuilderPage";
 import { AdminDashboardPage } from "./pages/AdminDashboardPage";
 import { AdminInventoryPage } from "./pages/AdminInventoryPage";
@@ -22,19 +23,21 @@ import { CartPage } from "./pages/CartPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
 import { CustomizeOrderPage } from "./pages/CustomizeOrderPage";
 import { HomePage } from "./pages/HomePage";
+import { MyOrdersPage } from "./pages/MyOrdersPage";
 import { ProductListingPage } from "./pages/ProductListingPage";
 
 function App() {
-  const { currentAccount, isAuthLoading, isLoggedIn, login, register, logout } = useAuth();
+  const { currentAccount, isAuthLoading, isLoggedIn, login, register, resetPassword, logout } = useAuth();
   const { data: siteContent } = useApiData(fetchSiteContent, []);
   const location = useLocation();
   const navigate = useNavigate();
   const showShadow = useRevealOnScroll();
   const isHome = location.pathname === "/";
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const isCustomerLoggedIn = isLoggedIn && !!currentAccount;
+  const cart = useCart(isLoggedIn && currentAccount?.role === "user" ? currentAccount.id : null);
+  const cartItems = cart.items;
   const [cartAnimationKey, setCartAnimationKey] = useState(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const isCustomerLoggedIn = isLoggedIn && !!currentAccount;
   const headerItems = isHome
     ? siteNavItems.map((item) =>
         item.label === "Start Customizing" ? { ...item, href: "/customize" } : item
@@ -56,29 +59,13 @@ function App() {
       return false;
     }
 
-    setCartItems((currentItems) => {
-      const existingItem = currentItems.find((item) => item.id === product.id);
-
-      if (existingItem) {
-        return currentItems.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        );
-      }
-
-      return [...currentItems, { ...product, quantity }];
-    });
+    cart.addItem(product, quantity);
     setCartAnimationKey((currentKey) => currentKey + 1);
     return true;
   };
 
-  const handleRemoveFromCart = (productId: string) => {
-    setCartItems((currentItems) => currentItems.filter((item) => item.id !== productId));
-  };
-
   const handleOrderPlaced = () => {
-    setCartItems([]);
+    cart.clear();
     setCartAnimationKey((currentKey) => currentKey + 1);
     showToast("Order placed successfully.", "success");
   };
@@ -118,9 +105,22 @@ function App() {
     redirectAfterLogin();
   };
 
+  const handleResetPassword = async (input: ResetPasswordInput) => {
+    await resetPassword(input);
+    redirectAfterLogin();
+  };
+
   useEffect(() => {
+    // Honour "/#section" links from other pages (the router doesn't scroll to hashes itself).
+    const target = location.hash ? document.getElementById(location.hash.slice(1)) : null;
+
+    if (target) {
+      target.scrollIntoView({ behavior: "auto" });
+      return;
+    }
+
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [location.pathname, location.search]);
+  }, [location.pathname, location.search, location.hash]);
 
   useEffect(() => {
     if (!toast) {
@@ -198,14 +198,14 @@ function App() {
             element={
               isCustomerLoggedIn
                 ? <Navigate to="/" replace />
-                : <LoginOverlay shopName={siteContent?.shopName ?? ""} onLogin={handleLogin} onRegister={handleRegister} onToast={showToast} />
+                : <LoginOverlay shopName={siteContent?.shopName ?? ""} onLogin={handleLogin} onRegister={handleRegister} onResetPassword={handleResetPassword} onToast={showToast} />
             }
           />
           <Route
             path="/cart"
             element={
               isCustomerLoggedIn
-                ? <CartPage items={cartItems} onRemoveItem={handleRemoveFromCart} />
+                ? <CartPage items={cartItems} onRemoveItem={cart.removeItem} onUpdateQuantity={cart.setItemQuantity} />
                 : <Navigate to="/login" replace state={{ from: "/cart" }} />
             }
           />
@@ -222,6 +222,14 @@ function App() {
                   />
                 )
                 : <Navigate to="/login" replace state={{ from: "/checkout" }} />
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              isCustomerLoggedIn
+                ? <MyOrdersPage />
+                : <Navigate to="/login" replace state={{ from: "/orders" }} />
             }
           />
           <Route
