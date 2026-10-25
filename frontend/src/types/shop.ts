@@ -357,8 +357,12 @@ export interface InventoryItem {
 export type AdminUserStatus = "Active" | "Disabled";
 export type AdminUserRole = "Customer" | "VIP";
 
+/** "user" is a customer account (with a tier); "admin" can sign in to the admin panel. */
+export type AdminAccountRole = "user" | "admin";
+
 export interface AdminUser {
   id: string;
+  accountRole: AdminAccountRole;
   firstName: string;
   lastName: string;
   fullName: string;
@@ -367,6 +371,18 @@ export interface AdminUser {
   // Profile photo the customer uploaded (Cloudinary), or null.
   avatarUrl: string | null;
   status: AdminUserStatus;
+  /** Customer tier; always "Customer" for admins. */
+  role: AdminUserRole;
+}
+
+/** A new account made by an admin, who sets its starting password. */
+export interface NewAdminUser {
+  firstName: string;
+  lastName: string;
+  email: string;
+  contactNumber: string;
+  password: string;
+  accountRole: AdminAccountRole;
   role: AdminUserRole;
 }
 

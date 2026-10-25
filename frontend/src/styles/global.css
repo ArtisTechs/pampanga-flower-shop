@@ -4269,6 +4269,17 @@ button.admin-builder-availability:disabled {
 .status-low { background: #ffe1e1; color: #b42323; }
 .status-vip { background: #fbe6f1; color: #a3246a; }
 .status-neutral { background: #f1ecec; color: #5f5355; }
+/* Confirmation step in admin dialogs: what will be saved, old values struck through. */
+.admin-ui-confirm { display: grid; gap: 12px; }
+.admin-ui-confirm-list { margin: 0; display: grid; gap: 2px; border: 1px solid #eadfe1; border-radius: 12px; overflow: hidden; }
+.admin-ui-confirm-list div { display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 10px 14px; background: #fff; }
+.admin-ui-confirm-list div:nth-child(even) { background: #fbf6f7; }
+.admin-ui-confirm-list dt { color: #7a6b6e; font-size: 0.8rem; font-weight: 700; }
+.admin-ui-confirm-list dd { margin: 0; font-size: 0.88rem; overflow-wrap: anywhere; }
+.admin-ui-confirm-list s { color: #9a8c8f; }
+.admin-ui-confirm-warning { margin: 0; padding: 10px 14px; border-radius: 10px; background: #fff4d6; color: #7a4f00; font-size: 0.84rem; font-weight: 600; }
+.admin-ui-password-rules { font-size: 0.8rem; }
+@media (max-width: 520px) { .admin-ui-confirm-list div { grid-template-columns: 1fr; gap: 2px; } }
 .admin-ui-status-select {
   min-height: 30px;
   border: 1px solid rgba(0, 0, 0, 0.08);

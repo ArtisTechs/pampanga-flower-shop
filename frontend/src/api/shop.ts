@@ -19,6 +19,7 @@ import type {
   GeneratedBouquetPreview,
   HomeContent,
   InventoryItem,
+  NewAdminUser,
   OtpPurpose,
   PaymentMethod,
   PaymentMethodInput,
@@ -178,6 +179,9 @@ export const adjustInventory = (itemId: string, delta: number) =>
   apiRequest<InventoryItem>(`/admin/inventory/${encodeURIComponent(itemId)}/adjust`, { method: "POST", body: { delta } });
 
 export const fetchAdminUsers = () => apiRequest<AdminUser[]>("/admin/users");
+
+export const createAdminUser = (user: NewAdminUser) =>
+  apiRequest<AdminUser>("/admin/users", { method: "POST", body: user });
 
 export const updateAdminUser = (user: AdminUser) =>
   apiRequest<AdminUser>(`/admin/users/${encodeURIComponent(user.id)}`, { method: "PATCH", body: user });
