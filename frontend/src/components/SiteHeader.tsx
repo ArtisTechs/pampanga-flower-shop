@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router";
-import type { NavItem } from "../types/shop";
+import type { Account, NavItem } from "../types/shop";
+import { resolveImagePath } from "../utils/assets";
 
 interface SiteHeaderProps {
   shopName: string;
@@ -9,6 +10,8 @@ interface SiteHeaderProps {
   onLogout?: () => void;
   onLoginClick?: () => void;
   showLogout?: boolean;
+  // Signed-in customer, for the profile photo and name in the user menu.
+  account?: Account | null;
   cartCount?: number;
   cartAnimationKey?: number;
 }
@@ -20,6 +23,7 @@ export const SiteHeader = ({
   onLogout,
   onLoginClick,
   showLogout = false,
+  account = null,
   cartCount = 0,
   cartAnimationKey = 0
 }: SiteHeaderProps) => {
@@ -224,14 +228,27 @@ export const SiteHeader = ({
             aria-expanded={showLogout && onLogout ? isUserMenuOpen : undefined}
             aria-haspopup={showLogout && onLogout ? "menu" : undefined}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <circle cx="12" cy="8" r="4" />
-              <path d="M4 21c1.6-5 5-7.5 8-7.5S18.4 16 20 21" />
-            </svg>
+            {showLogout && account?.avatarUrl ? (
+              <img className="profile-menu-avatar" src={resolveImagePath(account.avatarUrl, 80)} alt="" />
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21c1.6-5 5-7.5 8-7.5S18.4 16 20 21" />
+              </svg>
+            )}
             {showLogout && onLogout ? null : <span>Login</span>}
           </button>
           {showLogout && onLogout && isUserMenuOpen ? (
               <div className="profile-menu" role="menu">
+                {account ? <p className="profile-menu-name">{account.fullName}</p> : null}
+                <NavLink
+                  to="/profile"
+                  className="profile-menu-item"
+                  role="menuitem"
+                  onClick={() => setIsUserMenuOpen(false)}
+                >
+                  My Profile
+                </NavLink>
                 <NavLink
                   to="/orders"
                   className="profile-menu-item"

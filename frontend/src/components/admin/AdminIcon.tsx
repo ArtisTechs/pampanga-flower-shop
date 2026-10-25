@@ -5,6 +5,7 @@ interface AdminIconProps {
     | AdminDashboardStat["icon"]
     | "dashboard"
     | "orders"
+    | "payments"
     | "products"
     | "builder"
     | "inventory"
@@ -70,6 +71,18 @@ export const AdminIcon = ({ icon }: AdminIconProps) => {
         <path d="M12 4 3.5 19h17z" />
         <path d="M12 9v4" />
         <path d="M12 16h.01" />
+      </svg>
+    );
+  }
+
+  if (icon === "payments") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <path d="M14 14h3v3h-3z" />
+        <path d="M21 14v7h-7" />
       </svg>
     );
   }

@@ -25,6 +25,15 @@ export const requireEmail = (value: unknown) => {
   return email;
 };
 
+// First or last name: letters (any language), spaces, hyphens, apostrophes, periods; max 60.
+export const requireName = (value: unknown, field: string) => {
+  const name = requireString(value, field, 60).replace(/\s+/g, " ");
+  if (!/^\p{L}[\p{L}\p{M} .'-]*$/u.test(name)) {
+    throw new HttpError(400, `${field} can only contain letters, spaces, hyphens, apostrophes, and periods`);
+  }
+  return name;
+};
+
 // Rules for passwords being set (sign-up, reset). Login still accepts older, shorter passwords.
 export const requireNewPassword = (value: unknown) => {
   if (typeof value !== "string" || value.length === 0) {

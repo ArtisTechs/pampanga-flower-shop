@@ -1,9 +1,14 @@
 import { formatPhpCurrency } from "../../utils/currency";
 import { formatShopDateTime } from "../../utils/dates";
 import type { AdminOrder, AdminOrderStatus } from "../../types/shop";
+import { PaymentStatusBadge } from "../PaymentStatusBadge";
 import { AdminUiIcon } from "./AdminUi";
 
 export const ORDER_STATUSES: AdminOrderStatus[] = ["Pending", "Ready", "Completed"];
+
+// The shop only prepares orders whose payment is verified (or, for older orders, paid on pick-up).
+export const isPaymentSettled = (order: AdminOrder) =>
+  order.paymentStatus === "Verified" || order.paymentStatus === "Pay on pick-up";
 
 interface AdminOrderStatusSelectProps {
   order: AdminOrder;
@@ -21,7 +26,7 @@ export const AdminOrderStatusSelect = ({ order, disabled, onStatusChange }: Admi
     aria-label={`Status of ${order.customerName}'s order`}
   >
     {ORDER_STATUSES.map((status) => (
-      <option value={status} key={status}>{status}</option>
+      <option value={status} key={status} disabled={status !== "Pending" && !isPaymentSettled(order)}>{status}</option>
     ))}
   </select>
 );
@@ -42,6 +47,7 @@ export const AdminOrdersTable = ({ orders, updatingOrderId, onStatusChange, onVi
           <th>Size</th>
           <th>Pick-up</th>
           <th className="numeric">Total</th>
+          <th>Payment</th>
           <th>Status</th>
           <th><span className="visually-hidden">Details</span></th>
         </tr>
@@ -56,6 +62,7 @@ export const AdminOrdersTable = ({ orders, updatingOrderId, onStatusChange, onVi
             <td data-label="Size">{order.bouquetSize ?? "Catalog items"}</td>
             <td data-label="Pick-up">{formatShopDateTime(order.pickupAt)}</td>
             <td data-label="Total" className="numeric"><strong>{formatPhpCurrency(order.totalPhp)}</strong></td>
+            <td data-label="Payment"><PaymentStatusBadge status={order.paymentStatus} /></td>
             <td data-label="Status">
               <AdminOrderStatusSelect order={order} disabled={updatingOrderId === order.id} onStatusChange={onStatusChange} />
             </td>

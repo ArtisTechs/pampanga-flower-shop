@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router";
 import { fetchHome, fetchProducts } from "../api/shop";
 import { EmphasisText } from "../components/EmphasisText";
 import { FeaturedCarousel } from "../components/FeaturedCarousel";
+import { FallingPetals } from "../components/FallingPetals";
+import { hasLineIcon, LineIcon } from "../components/LineIcon";
 import { LoadState } from "../components/LoadState";
 import { useApiData } from "../hooks/useApiData";
 import type { SiteContent } from "../types/shop";
@@ -61,7 +63,13 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePagePr
   };
 
   return (
-    <>
+    <div className="home-page">
+      <div
+        className="home-backdrop"
+        style={{ "--home-backdrop-image": `url("${siteImage("home-florals.svg")}")` } as CSSProperties}
+        aria-hidden="true"
+      />
+      <FallingPetals />
       <section id="home" className="hero">
         <div className="hero-container">
           <p className="cta-first">
@@ -79,7 +87,12 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePagePr
           </div>
           <div className="hero-perks" aria-label="Shop benefits">
             {perks.map((perk) => (
-              <p key={perk.id}><span aria-hidden="true">{perk.icon}</span> {perk.label}</p>
+              <p key={perk.id} className="hero-perk">
+                <span className="hero-perk-icon" aria-hidden="true">
+                  {hasLineIcon(perk.id) ? <LineIcon name={perk.id} /> : perk.icon}
+                </span>
+                {perk.label}
+              </p>
             ))}
           </div>
         </div>
@@ -222,9 +235,9 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePagePr
                   "--reveal-y": "24px"
                 } as CSSProperties}
               >
-                <div className="step-number">{String(index + 1).padStart(2, "0")}</div>
-                <div className={`step-icon step-icon-${step.icon}`} aria-hidden="true">
-                  <span></span>
+                <div className="step-badge" aria-hidden="true">
+                  <LineIcon name={step.icon} />
+                  <span className="step-number">{String(index + 1).padStart(2, "0")}</span>
                 </div>
                 <p>{step.description}</p>
               </article>
@@ -261,6 +274,6 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePagePr
           </div>
         </div>
       </section>
-    </>
+    </div>
   );
 };

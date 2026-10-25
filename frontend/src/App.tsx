@@ -15,6 +15,7 @@ import { AdminBouquetBuilderPage } from "./pages/AdminBouquetBuilderPage";
 import { AdminDashboardPage } from "./pages/AdminDashboardPage";
 import { AdminInventoryPage } from "./pages/AdminInventoryPage";
 import { AdminOrdersPage } from "./pages/AdminOrdersPage";
+import { AdminPaymentMethodsPage } from "./pages/AdminPaymentMethodsPage";
 import { AdminProductsPage } from "./pages/AdminProductsPage";
 import { AdminReportsPage } from "./pages/AdminReportsPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
@@ -24,10 +25,11 @@ import { CheckoutPage } from "./pages/CheckoutPage";
 import { CustomizeOrderPage } from "./pages/CustomizeOrderPage";
 import { HomePage } from "./pages/HomePage";
 import { MyOrdersPage } from "./pages/MyOrdersPage";
+import { ProfilePage } from "./pages/ProfilePage";
 import { ProductListingPage } from "./pages/ProductListingPage";
 
 function App() {
-  const { currentAccount, isAuthLoading, isLoggedIn, login, register, resetPassword, logout } = useAuth();
+  const { currentAccount, isAuthLoading, isLoggedIn, login, register, resetPassword, logout, updateAccount } = useAuth();
   const { data: siteContent } = useApiData(fetchSiteContent, []);
   const location = useLocation();
   const navigate = useNavigate();
@@ -148,6 +150,10 @@ function App() {
             element={<AdminOrdersPage account={currentAccount} onLogout={logout} onToast={showToast} />}
           />
           <Route
+            path="/admin/payments"
+            element={<AdminPaymentMethodsPage account={currentAccount} onLogout={logout} onToast={showToast} />}
+          />
+          <Route
             path="/admin/products"
             element={<AdminProductsPage account={currentAccount} onLogout={logout} onToast={showToast} />}
           />
@@ -187,6 +193,7 @@ function App() {
         onLogout={logout}
         showLogout={isCustomerLoggedIn}
         onLoginClick={() => navigate("/login")}
+        account={isCustomerLoggedIn ? currentAccount : null}
         cartCount={cartCount}
         cartAnimationKey={cartAnimationKey}
       />
@@ -230,6 +237,14 @@ function App() {
               isCustomerLoggedIn
                 ? <MyOrdersPage />
                 : <Navigate to="/login" replace state={{ from: "/orders" }} />
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              isCustomerLoggedIn && currentAccount
+                ? <ProfilePage account={currentAccount} onAccountUpdated={updateAccount} onToast={showToast} />
+                : <Navigate to="/login" replace state={{ from: "/profile" }} />
             }
           />
           <Route

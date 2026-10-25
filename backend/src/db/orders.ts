@@ -6,7 +6,8 @@ interface OrderItemRow extends RowDataPacket {
   product_name: string;
   unit_price_php: number;
   quantity: number;
-  customization: { size: string; palette: string; wrap: string; ribbon: string } | null;
+  // fillers is missing on orders placed before fillers existed.
+  customization: { size: string; palette: string; wrap: string; ribbon: string; fillers?: string[] } | null;
   image_path: string | null;
 }
 
@@ -19,7 +20,8 @@ interface OrderItemFlowerRow extends RowDataPacket {
 // Every item of an order with its bouquet details and flower counts.
 export const loadOrderItems = async (orderId: string) => {
   const [items] = await pool.query<OrderItemRow[]>(
-    `SELECT oi.id, oi.product_name, oi.unit_price_php, oi.quantity, oi.customization, p.image_path
+    `SELECT oi.id, oi.product_name, oi.unit_price_php, oi.quantity, oi.customization,
+            COALESCE(p.image_path, oi.preview_image_url) AS image_path
      FROM order_items oi
      LEFT JOIN products p ON p.id = oi.product_id
      WHERE oi.order_id = ?

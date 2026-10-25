@@ -12,15 +12,20 @@ import type {
   BouquetSelection,
   BuilderConfig,
   CatalogCollection,
+  ChangePasswordInput,
   CatalogListing,
   CustomerOrder,
   CustomerOrderDetail,
+  GeneratedBouquetPreview,
   HomeContent,
   InventoryItem,
   OtpPurpose,
+  PaymentMethod,
+  PaymentMethodInput,
   PlacedOrder,
   ProductCategory,
   ProductItem,
+  ProfileInput,
   RegisterInput,
   ReportRange,
   ResetPasswordInput,
@@ -63,12 +68,24 @@ export const fetchBuilder = async (): Promise<BuilderConfig> => {
   return { ...builder, previews: builder.previews.map(withAssetImage) };
 };
 
+// The preview for this exact selection; the API generates it only if it isn't cached yet.
+export const fetchBouquetPreview = async (selection: BouquetSelection) =>
+  resolveImagePath(
+    (await apiRequest<{ image: string; generated: boolean }>("/builder/preview", { method: "POST", body: selection })).image
+  );
+
 export type OrderItemInput =
   | { productId: string; quantity: number }
   | { custom: BouquetSelection; quantity: number };
 
-export const placeOrder = (input: { pickupAt: string; items: OrderItemInput[] }) =>
+export const fetchPaymentMethods = () => apiRequest<PaymentMethod[]>("/payment-methods");
+
+export const placeOrder = (input: { pickupAt: string; paymentMethodId: string; items: OrderItemInput[] }) =>
   apiRequest<PlacedOrder>("/orders", { method: "POST", body: input });
+
+// The payment screenshot (JPG, PNG, or WebP, max 2 MB); the shop verifies it before preparing the order.
+export const uploadPaymentProof = (orderId: string, file: File) =>
+  apiRequest<CustomerOrder>(`/orders/${encodeURIComponent(orderId)}/payment-proof`, { method: "POST", body: file });
 
 export const fetchMyOrders = () => apiRequest<CustomerOrder[]>("/orders");
 
@@ -99,6 +116,19 @@ export const requestOtp = (email: string, purpose: OtpPurpose) =>
 export const resetPasswordRequest = (input: ResetPasswordInput) =>
   apiRequest<AuthResponse>("/auth/password/reset", { method: "POST", body: input });
 
+export const updateProfile = async (input: ProfileInput) =>
+  (await apiRequest<{ account: Account }>("/account", { method: "PATCH", body: input })).account;
+
+// The file is sent as-is (JPG, PNG, or WebP, max 2 MB) and stored on Cloudinary.
+export const uploadAvatar = async (file: File) =>
+  (await apiRequest<{ account: Account }>("/account/avatar", { method: "POST", body: file })).account;
+
+export const removeAvatar = async () =>
+  (await apiRequest<{ account: Account }>("/account/avatar", { method: "DELETE" })).account;
+
+export const changePassword = (input: ChangePasswordInput) =>
+  apiRequest<void>("/account/password", { method: "POST", body: input });
+
 export const fetchMe = async () => (await apiRequest<{ account: Account }>("/auth/me")).account;
 
 export const logoutRequest = () => apiRequest<void>("/auth/logout", { method: "POST" });
@@ -122,6 +152,26 @@ export const fetchAdminOrder = async (orderId: string) => {
 export const updateOrderStatus = (orderId: string, status: AdminOrderStatus) =>
   apiRequest<AdminOrder>(`/admin/orders/${encodeURIComponent(orderId)}`, { method: "PATCH", body: { status } });
 
+export const reviewOrderPayment = (orderId: string, decision: "Verified" | "Rejected", note?: string) =>
+  apiRequest<AdminOrder>(`/admin/orders/${encodeURIComponent(orderId)}/payment`, {
+    method: "PATCH",
+    body: { decision, note }
+  });
+
+export const fetchAdminPaymentMethods = () => apiRequest<PaymentMethod[]>("/admin/payment-methods");
+
+export const createPaymentMethod = (input: PaymentMethodInput) =>
+  apiRequest<PaymentMethod>("/admin/payment-methods", { method: "POST", body: input });
+
+export const updatePaymentMethod = (methodId: string, input: PaymentMethodInput) =>
+  apiRequest<PaymentMethod>(`/admin/payment-methods/${encodeURIComponent(methodId)}`, { method: "PATCH", body: input });
+
+export const deletePaymentMethod = (methodId: string) =>
+  apiRequest<void>(`/admin/payment-methods/${encodeURIComponent(methodId)}`, { method: "DELETE" });
+
+export const uploadPaymentQr = async (file: File) =>
+  (await apiRequest<{ url: string }>("/admin/uploads/payment-qr", { method: "POST", body: file })).url;
+
 export const fetchInventory = () => apiRequest<InventoryItem[]>("/admin/inventory");
 
 export const adjustInventory = (itemId: string, delta: number) =>
@@ -137,11 +187,17 @@ export const saveSiteContent = (content: SiteContent) =>
 
 export const fetchBuilderOptions = () => apiRequest<AdminBuilderOption[]>("/admin/builder-options");
 
-export const setBuilderOptionAvailability = (optionId: string, available: boolean) =>
+export const updateBuilderOption = (optionId: string, changes: { available?: boolean; pricePhp?: number }) =>
   apiRequest<AdminBuilderOption>(`/admin/builder-options/${encodeURIComponent(optionId)}`, {
     method: "PATCH",
-    body: { available }
+    body: changes
   });
+
+export const fetchGeneratedPreviews = async () =>
+  (await apiRequest<GeneratedBouquetPreview[]>("/admin/builder-previews")).map((preview) => withAssetImage(preview));
+
+export const deleteGeneratedPreview = (key: string) =>
+  apiRequest<void>(`/admin/builder-previews/${encodeURIComponent(key)}`, { method: "DELETE" });
 
 export const fetchAdminProducts = () => apiRequest<AdminProduct[]>("/admin/products");
 

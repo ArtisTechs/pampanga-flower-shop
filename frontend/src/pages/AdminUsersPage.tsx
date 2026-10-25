@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { errorMessage } from "../api/client";
 import { fetchAdminUsers, updateAdminUser } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
@@ -7,15 +7,17 @@ import { AdminLayout } from "../components/admin/AdminLayout";
 import { AdminDialog, AdminPageHeader, AdminSegments, AdminUiIcon } from "../components/admin/AdminUi";
 import { useApiData } from "../hooks/useApiData";
 import type { Account, AdminUser, AdminUserRole } from "../types/shop";
+import { resolveImagePath } from "../utils/assets";
+import { validateName } from "../utils/validation";
 
 type StatusFilter = "All" | "Active" | "Disabled";
 
-const initialsFrom = (name: string) =>
-  name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
+const USERS_REFRESH_MS = 30_000;
+
+// Same rule as the API's avatarInitials: first letter of the first and last names.
+const initialsFrom = (user: AdminUser) =>
+  [user.firstName, user.lastName]
+    .map((name) => name.trim()[0]?.toUpperCase() ?? "")
     .join("");
 
 interface AdminUsersPageProps {
@@ -30,6 +32,27 @@ export const AdminUsersPage = ({ account, onLogout, onToast }: AdminUsersPagePro
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const users = useMemo(() => usersData.data ?? [], [usersData.data]);
+  const { updateData: updateUsers } = usersData;
+
+  // Customers edit their own names and photos; refresh quietly (no loading state) when the admin
+  // comes back to the tab and every 30 seconds while it's visible.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      fetchAdminUsers().then((fresh) => updateUsers(() => fresh), () => undefined);
+    };
+    const intervalId = window.setInterval(refresh, USERS_REFRESH_MS);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [updateUsers]);
 
   const counts: Record<StatusFilter, number> = {
     All: users.length,
@@ -109,7 +132,11 @@ export const AdminUsersPage = ({ account, onLogout, onToast }: AdminUsersPagePro
                   <tr key={user.id} className={user.status === "Disabled" ? "is-muted" : ""}>
                     <td data-label="Customer">
                       <div className="admin-ui-person">
-                        <span className="admin-ui-avatar" aria-hidden="true">{initialsFrom(user.fullName)}</span>
+                        <span className="admin-ui-avatar" aria-hidden="true">
+                          {user.avatarUrl
+                            ? <img src={resolveImagePath(user.avatarUrl, 80)} alt="" loading="lazy" />
+                            : initialsFrom(user)}
+                        </span>
                         <div>
                           <strong>{user.fullName}</strong>
                           <span className="admin-ui-muted">{user.email}</span>
@@ -155,10 +182,11 @@ interface UserEditDialogProps {
   onToast: (message: string, tone: ToastTone) => void;
 }
 
-type FieldErrors = Partial<Record<"fullName" | "email" | "contactNumber", string>>;
+type FieldErrors = Partial<Record<"firstName" | "lastName" | "email" | "contactNumber", string>>;
 
 const UserEditDialog = ({ user, onClose, onSaved, onToast }: UserEditDialogProps) => {
-  const [fullName, setFullName] = useState(user.fullName);
+  const [firstName, setFirstName] = useState(user.firstName);
+  const [lastName, setLastName] = useState(user.lastName);
   const [email, setEmail] = useState(user.email);
   const [contactNumber, setContactNumber] = useState(user.contactNumber);
   const [role, setRole] = useState<AdminUserRole>(user.role);
@@ -173,7 +201,8 @@ const UserEditDialog = ({ user, onClose, onSaved, onToast }: UserEditDialogProps
     }
 
     const nextErrors: FieldErrors = {
-      fullName: fullName.trim() ? undefined : "Enter the customer's name.",
+      firstName: validateName(firstName, "First name"),
+      lastName: validateName(lastName, "Last name"),
       email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? undefined : "Enter a valid email address.",
       contactNumber: /^[0-9+()\s-]{7,32}$/.test(contactNumber.trim()) ? undefined : "Enter a valid phone number."
     };
@@ -186,7 +215,8 @@ const UserEditDialog = ({ user, onClose, onSaved, onToast }: UserEditDialogProps
     try {
       onSaved(await updateAdminUser({
         ...user,
-        fullName: fullName.trim(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
         email: email.trim(),
         contactNumber: contactNumber.trim(),
         role,
@@ -214,11 +244,18 @@ const UserEditDialog = ({ user, onClose, onSaved, onToast }: UserEditDialogProps
       }
     >
       <div className="admin-product-fields">
-        <label className="admin-product-field">
-          <span className="admin-product-label">Full name <em>*</em></span>
-          <input className={errors.fullName ? "invalid" : ""} value={fullName} onChange={(event) => setFullName(event.target.value)} maxLength={120} />
-          {errors.fullName ? <span className="admin-product-error">{errors.fullName}</span> : null}
-        </label>
+        <div className="admin-product-field-row admin-ui-field-row-even">
+          <label className="admin-product-field">
+            <span className="admin-product-label">First name <em>*</em></span>
+            <input className={errors.firstName ? "invalid" : ""} value={firstName} onChange={(event) => setFirstName(event.target.value)} maxLength={60} />
+            {errors.firstName ? <span className="admin-product-error">{errors.firstName}</span> : null}
+          </label>
+          <label className="admin-product-field">
+            <span className="admin-product-label">Last name <em>*</em></span>
+            <input className={errors.lastName ? "invalid" : ""} value={lastName} onChange={(event) => setLastName(event.target.value)} maxLength={60} />
+            {errors.lastName ? <span className="admin-product-error">{errors.lastName}</span> : null}
+          </label>
+        </div>
         <div className="admin-product-field-row admin-ui-field-row-even">
           <label className="admin-product-field">
             <span className="admin-product-label">Email <em>*</em></span>

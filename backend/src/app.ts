@@ -3,6 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import { config } from "./config.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
+import { accountRouter } from "./routes/account.js";
 import { adminRouter } from "./routes/admin/index.js";
 import { authRouter } from "./routes/auth.js";
 import { builderRouter } from "./routes/builder.js";
@@ -20,6 +21,7 @@ app.use(express.json({ limit: "100kb" }));
 
 app.use("/api/health", healthRouter);
 app.use("/api/auth", authRouter);
+app.use("/api/account", accountRouter);
 app.use("/api/orders", ordersRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api", catalogRouter);

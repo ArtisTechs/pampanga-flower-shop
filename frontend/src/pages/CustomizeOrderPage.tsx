@@ -1,14 +1,20 @@
-import { useMemo, useState, type CSSProperties, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
-import { fetchBuilder } from "../api/shop";
+import { fetchBouquetPreview, fetchBuilder } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
 import { LoadState } from "../components/LoadState";
 import { useApiData } from "../hooks/useApiData";
-import type { BuilderConfig, BuilderOption, BuilderPreview, ProductItem } from "../types/shop";
+import type { BouquetSelection, BuilderConfig, BuilderOption, BuilderPreview, ProductItem } from "../types/shop";
 import { formatPhpCurrency } from "../utils/currency";
 
 type CustomizeStep = "flowers" | "style" | "preview";
+
+interface GeneratedPreviewState {
+  signature: string;
+  status: "loading" | "ready" | "failed";
+  image: string | null;
+}
 
 interface CustomizeOrderPageProps {
   onAddToCart: (product: ProductItem, quantity: number) => boolean;
@@ -51,7 +57,7 @@ interface CustomizeOrderFormProps extends CustomizeOrderPageProps {
 }
 
 const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderFormProps) => {
-  const { sizes: bouquetSizes, flowers, palettes, wraps, ribbons, maxFlowers: maxFlowerCount, defaults: preferredDefaults } = config;
+  const { sizes: bouquetSizes, flowers, fillers, palettes, wraps, ribbons, maxFlowers: maxFlowerCount, defaults: preferredDefaults } = config;
   const previewOptionsByFlowerCount = useMemo(() => {
     const byCount = new Map<number, BuilderPreview[]>();
     config.previews.forEach((preview) => {
@@ -65,10 +71,14 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
   const [flowerCounts, setFlowerCounts] = useState<Record<string, number>>(
     Object.fromEntries(flowers.map((flower) => [flower.id, 0]))
   );
+  const [selectedFillers, setSelectedFillers] = useState<string[]>([]);
   const [selectedPalette, setSelectedPalette] = useState(() => defaultChoice(palettes, preferredDefaults.palette));
   const [selectedWrap, setSelectedWrap] = useState(() => defaultChoice(wraps, preferredDefaults.wrap));
   const [selectedRibbon, setSelectedRibbon] = useState(() => defaultChoice(ribbons, preferredDefaults.ribbon));
   const [showAddedPrompt, setShowAddedPrompt] = useState(false);
+  const [generatedPreview, setGeneratedPreview] = useState<GeneratedPreviewState | null>(null);
+  // Images already returned this visit, so going back and forth doesn't call the API again.
+  const previewCache = useRef(new Map<string, string>());
   const [flyAnimation, setFlyAnimation] = useState<{
     id: number;
     fromX: number;
@@ -82,13 +92,28 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
   const selectedWrapOption = findOption(wraps, selectedWrap);
   const selectedRibbonOption = findOption(ribbons, selectedRibbon);
   const selectedFlowers = flowers.filter((flower) => flowerCounts[flower.id] > 0);
+  const selectedFillerOptions = fillers.filter((filler) => selectedFillers.includes(filler.id));
   const totalFlowerCount = selectedFlowers.reduce((total, flower) => total + flowerCounts[flower.id], 0);
   const totalPrice = useMemo(
-    () => selectedSizeOption.pricePhp
-      + selectedFlowers.reduce((total, flower) => total + flower.pricePhp * flowerCounts[flower.id], 0),
-    [flowerCounts, selectedFlowers, selectedSizeOption.pricePhp]
+    () => selectedSizeOption.pricePhp + selectedPaletteOption.pricePhp + selectedWrapOption.pricePhp + selectedRibbonOption.pricePhp
+      + selectedFlowers.reduce((total, flower) => total + flower.pricePhp * flowerCounts[flower.id], 0)
+      + selectedFillerOptions.reduce((total, filler) => total + filler.pricePhp, 0),
+    [
+      flowerCounts, selectedFillerOptions, selectedFlowers, selectedPaletteOption.pricePhp, selectedRibbonOption.pricePhp,
+      selectedSizeOption.pricePhp, selectedWrapOption.pricePhp
+    ]
   );
-  const previewImage = useMemo(() => {
+  const selection: BouquetSelection = {
+    size: selectedSizeOption.id,
+    palette: selectedPaletteOption.id,
+    wrap: selectedWrapOption.id,
+    ribbon: selectedRibbonOption.id,
+    flowers: selectedFlowers.map((flower) => ({ code: flower.id, quantity: flowerCounts[flower.id] })),
+    fillers: selectedFillerOptions.map((filler) => filler.id)
+  };
+  const selectionSignature = JSON.stringify(selection);
+  // Closest stock photo: shown if the exact preview can't be generated.
+  const stockPreviewImage = useMemo(() => {
     const countKey = Math.max(1, Math.min(maxFlowerCount, totalFlowerCount));
     const options = previewOptionsByFlowerCount.get(countKey) ?? config.previews;
 
@@ -122,6 +147,41 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
       .sort((first, second) => second.score - first.score)[0].option.image;
   }, [config.previews, flowerCounts, maxFlowerCount, previewOptionsByFlowerCount, selectedFlowers, selectedPalette, selectedRibbon, selectedWrap, totalFlowerCount]);
 
+  // The exact preview is requested on the preview step only; the API reuses a cached image when it has one
+  // and generates a new one otherwise.
+  useEffect(() => {
+    if (step !== "preview") {
+      return;
+    }
+    const cachedImage = previewCache.current.get(selectionSignature);
+    if (cachedImage) {
+      setGeneratedPreview({ signature: selectionSignature, status: "ready", image: cachedImage });
+      return;
+    }
+
+    let isCurrent = true;
+    setGeneratedPreview({ signature: selectionSignature, status: "loading", image: null });
+    fetchBouquetPreview(JSON.parse(selectionSignature) as BouquetSelection)
+      .then((image) => {
+        previewCache.current.set(selectionSignature, image);
+        if (isCurrent) {
+          setGeneratedPreview({ signature: selectionSignature, status: "ready", image });
+        }
+      })
+      .catch(() => {
+        if (isCurrent) {
+          setGeneratedPreview({ signature: selectionSignature, status: "failed", image: null });
+        }
+      });
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectionSignature, step]);
+
+  const currentPreview = generatedPreview?.signature === selectionSignature ? generatedPreview : null;
+  const isPreviewLoading = step === "preview" && (!currentPreview || currentPreview.status === "loading");
+  const previewImage = currentPreview?.image ?? stockPreviewImage;
+
   const updateFlowerCount = (flowerId: string, amount: number) => {
     setFlowerCounts((currentCounts) => {
       const currentTotal = Object.values(currentCounts).reduce((total, count) => total + count, 0);
@@ -135,6 +195,12 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
         [flowerId]: Math.max(0, currentCounts[flowerId] + amount)
       };
     });
+  };
+
+  const toggleFiller = (fillerId: string) => {
+    setSelectedFillers((current) =>
+      current.includes(fillerId) ? current.filter((id) => id !== fillerId) : [...current, fillerId]
+    );
   };
 
   const handleSurpriseMe = () => {
@@ -152,6 +218,9 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
 
     setSelectedSize(choiceFrom(bouquetSizes).id);
     setFlowerCounts(nextCounts);
+    setSelectedFillers(
+      [...fillers].sort(() => Math.random() - 0.5).slice(0, Math.floor(Math.random() * 3)).map((filler) => filler.id)
+    );
     setSelectedPalette(choiceFrom(palettes).id);
     setSelectedWrap(choiceFrom(wraps).id);
     setSelectedRibbon(choiceFrom(ribbons).id);
@@ -170,6 +239,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
   const resetCustomization = () => {
     setSelectedSize(defaultChoice(bouquetSizes, preferredDefaults.size));
     setFlowerCounts(Object.fromEntries(flowers.map((flower) => [flower.id, 0])));
+    setSelectedFillers([]);
     setSelectedPalette(defaultChoice(palettes, preferredDefaults.palette));
     setSelectedWrap(defaultChoice(wraps, preferredDefaults.wrap));
     setSelectedRibbon(defaultChoice(ribbons, preferredDefaults.ribbon));
@@ -190,19 +260,16 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
     const flowerSummary = selectedFlowers
       .map((flower) => `${flower.name} x${flowerCounts[flower.id]}`)
       .join(", ");
+    const fillerSummary = selectedFillerOptions.length > 0
+      ? ` with ${selectedFillerOptions.map((filler) => filler.name).join(", ")}`
+      : "";
     const product: ProductItem = {
       id: `custom-${Date.now()}`,
-      name: `Custom ${selectedSizeOption.name} Bouquet - ${selectedPaletteOption.name}, ${selectedWrapOption.name}, ${selectedRibbonOption.name} (${flowerSummary})`,
+      name: `Custom ${selectedSizeOption.name} Bouquet - ${selectedPaletteOption.name}, ${selectedWrapOption.name}, ${selectedRibbonOption.name} (${flowerSummary}${fillerSummary})`,
       pricePhp: totalPrice,
       image: previewImage,
       custom: {
-        selection: {
-          size: selectedSizeOption.id,
-          palette: selectedPaletteOption.id,
-          wrap: selectedWrapOption.id,
-          ribbon: selectedRibbonOption.id,
-          flowers: selectedFlowers.map((flower) => ({ code: flower.id, quantity: flowerCounts[flower.id] }))
-        },
+        selection,
         wrapName: selectedWrapOption.name,
         ribbonName: selectedRibbonOption.name
       }
@@ -330,6 +397,38 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                 ))}
               </div>
             </div>
+
+            {fillers.length > 0 ? (
+              <div className="customize-section">
+                <div className="customize-section-heading">
+                  <h2>Fillers</h2>
+                  <span>{selectedFillerOptions.length} selected</span>
+                </div>
+                <div className="flower-choice-grid">
+                  {fillers.map((filler) => {
+                    const isSelected = selectedFillers.includes(filler.id);
+                    return (
+                      <article key={filler.id} className={`flower-choice ${isSelected ? "selected" : ""}`}>
+                        <span className="flower-dot" style={{ backgroundColor: filler.colors[0] }} aria-hidden="true" />
+                        <div>
+                          <strong>{filler.name}</strong>
+                          <span>+{formatPhpCurrency(filler.pricePhp)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className={`filler-toggle ${isSelected ? "selected" : ""}`}
+                          onClick={() => toggleFiller(filler.id)}
+                          aria-pressed={isSelected}
+                          aria-label={`${isSelected ? "Remove" : "Add"} ${filler.name}`}
+                        >
+                          {isSelected ? "Added" : "Add"}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
           </>
         ) : step === "style" ? (
           <>
@@ -350,6 +449,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                       ))}
                     </span>
                     <strong>{palette.name}</strong>
+                    {palette.pricePhp > 0 ? <small>+{formatPhpCurrency(palette.pricePhp)}</small> : null}
                   </button>
                 ))}
               </div>
@@ -357,7 +457,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
 
             <div className="customize-section">
               <h2>Wrap Style</h2>
-              <div className="pill-choice-grid four-column">
+              <div className="pill-choice-grid">
                 {wraps.map((wrap) => (
                   <button
                     key={wrap.id}
@@ -367,6 +467,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                     aria-pressed={selectedWrap === wrap.id}
                   >
                     {wrap.name}
+                    {wrap.pricePhp > 0 ? <small className="custom-choice-price">+{formatPhpCurrency(wrap.pricePhp)}</small> : null}
                   </button>
                 ))}
               </div>
@@ -384,6 +485,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                     aria-pressed={selectedRibbon === ribbon.id}
                   >
                     {ribbon.name}
+                    {ribbon.pricePhp > 0 ? <small className="custom-choice-price">+{formatPhpCurrency(ribbon.pricePhp)}</small> : null}
                   </button>
                 ))}
               </div>
@@ -394,11 +496,19 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
             <p className="custom-preview-eyebrow">Your custom creation</p>
             <h2>Build Your Bouquet</h2>
             <div className="custom-preview-card">
-              <div className="custom-preview-image-wrap">
-                <img src={previewImage} alt="Preview of your customized bouquet" />
+              <div className={`custom-preview-image-wrap ${isPreviewLoading ? "is-loading" : ""}`} aria-busy={isPreviewLoading}>
+                {isPreviewLoading ? (
+                  <p className="custom-preview-loading" role="status">Arranging your bouquet preview…</p>
+                ) : (
+                  <img src={previewImage} alt="Preview of your customized bouquet" />
+                )}
               </div>
+              {currentPreview?.status === "failed" ? (
+                <p className="custom-preview-note">Showing a similar bouquet. Your florist will follow your exact choices.</p>
+              ) : null}
               <div className="custom-preview-summary">
                 <span>{selectedSizeOption.name}</span>
+                {selectedFillerOptions.map((filler) => <span key={filler.id}>{filler.name}</span>)}
                 <span>{selectedPaletteOption.name}</span>
                 <span>{selectedWrapOption.name}</span>
                 <span>{selectedRibbonOption.name}</span>
@@ -408,7 +518,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                 <button type="button" className="custom-preview-cancel" onClick={() => setStep("style")}>
                   Back
                 </button>
-                <button type="button" className="proceed-button" onClick={handleAddCustomBouquet}>
+                <button type="button" className="proceed-button" onClick={handleAddCustomBouquet} disabled={isPreviewLoading}>
                   Add to Cart
                 </button>
               </div>

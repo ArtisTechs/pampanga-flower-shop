@@ -84,5 +84,15 @@ export const useAuth = () => {
     setCurrentAccount(null);
   };
 
-  return { currentAccount, isAuthLoading, isLoggedIn: currentAccount !== null, login, register, resetPassword, logout };
+  return {
+    currentAccount,
+    isAuthLoading,
+    isLoggedIn: currentAccount !== null,
+    login,
+    register,
+    resetPassword,
+    logout,
+    // For profile edits: the API returns the updated account.
+    updateAccount: setCurrentAccount
+  };
 };

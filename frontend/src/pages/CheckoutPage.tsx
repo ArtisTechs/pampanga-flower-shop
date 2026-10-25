@@ -2,7 +2,11 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import type { CSSProperties } from "react";
 import { errorMessage } from "../api/client";
-import { placeOrder } from "../api/shop";
+import { fetchPaymentMethods, placeOrder, uploadPaymentProof } from "../api/shop";
+import { LoadState } from "../components/LoadState";
+import { PaymentMethodPicker } from "../components/PaymentMethodPicker";
+import { PaymentProofInput } from "../components/PaymentProofInput";
+import { useApiData } from "../hooks/useApiData";
 import type { Account, CartItem, PlacedOrder, SiteContent } from "../types/shop";
 import { siteImage } from "../utils/assets";
 import { formatPhpCurrency } from "../utils/currency";
@@ -33,7 +37,14 @@ export const CheckoutPage = ({ account, items, siteContent, onOrderPlaced }: Che
   const [isConfirming, setIsConfirming] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
+  const paymentMethods = useApiData(fetchPaymentMethods, []);
+  const [chosenMethodId, setChosenMethodId] = useState<string | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  // Set when the order was placed but its screenshot didn't upload (it can be re-sent from My Orders).
+  const [proofError, setProofError] = useState<string | null>(null);
   const isConfirmed = placedOrder !== null;
+  const methods = paymentMethods.data ?? [];
+  const selectedMethodId = chosenMethodId ?? methods[0]?.id ?? "";
   const wrapNames = uniqueNames(orderItems.map((item) => item.custom?.wrapName));
   const ribbonNames = uniqueNames(orderItems.map((item) => item.custom?.ribbonName));
   const minPickupValue = useMemo(() => toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)), []);
@@ -59,12 +70,21 @@ export const CheckoutPage = ({ account, items, siteContent, onOrderPlaced }: Che
       setOrderError("Please choose a pick-up date and time.");
       return;
     }
+    if (!selectedMethodId) {
+      setOrderError("Please choose how you paid.");
+      return;
+    }
+    if (!proofFile) {
+      setOrderError("Please attach a screenshot of your payment.");
+      return;
+    }
 
     setIsConfirming(true);
     setOrderError(null);
     try {
       const order = await placeOrder({
         pickupAt: pickupAt.toISOString(),
+        paymentMethodId: selectedMethodId,
         items: orderItems.map((item) => (
           item.custom
             ? { custom: item.custom.selection, quantity: item.quantity }
@@ -73,6 +93,11 @@ export const CheckoutPage = ({ account, items, siteContent, onOrderPlaced }: Che
       });
       setPlacedOrder(order);
       onOrderPlaced();
+      try {
+        await uploadPaymentProof(order.id, proofFile);
+      } catch (error) {
+        setProofError(errorMessage(error));
+      }
     } catch (error) {
       setOrderError(errorMessage(error));
     } finally {
@@ -206,21 +231,43 @@ export const CheckoutPage = ({ account, items, siteContent, onOrderPlaced }: Che
                 />
               )}
             </li>
-            <li>
-              <span aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <rect width="20" height="14" x="2" y="5" rx="2" />
-                  <path d="M2 10h20" />
-                </svg>
-              </span>
-              {siteContent?.paymentMethod}
-            </li>
           </ul>
         </div>
 
-        {placedOrder ? (
+        <div className="order-summary-section payment-section">
+          <h2>Payment</h2>
+          {!paymentMethods.data ? (
+            <LoadState error={paymentMethods.error} onRetry={paymentMethods.reload} />
+          ) : methods.length === 0 ? (
+            <p className="payment-section-note">
+              Online payment isn't set up yet, so orders can't be placed right now. Please contact the shop.
+            </p>
+          ) : (
+            <>
+              <ol className="payment-steps">
+                <li>Send <strong>{formatPhpCurrency(subtotal)}</strong> to one of these accounts.</li>
+                <li>Attach a screenshot of your payment.</li>
+                <li>We'll verify it before preparing your bouquet.</li>
+              </ol>
+              <PaymentMethodPicker
+                methods={methods}
+                selectedId={selectedMethodId}
+                onSelect={setChosenMethodId}
+                disabled={isConfirming || isConfirmed}
+              />
+              <PaymentProofInput file={proofFile} onChange={setProofFile} disabled={isConfirming || isConfirmed} />
+            </>
+          )}
+        </div>
+
+        {placedOrder && proofError ? (
+          <div className="order-success-message order-error-message" role="alert">
+            Your order was placed, but the payment screenshot didn't upload ({proofError}).
+            {" "}<Link to="/orders" className="order-track-link">Upload it from My Orders</Link>
+          </div>
+        ) : placedOrder ? (
           <div className="order-success-message" role="status">
-            Successful order. We will prepare your bouquet for pick-up. Total due on pick-up: {formatPhpCurrency(placedOrder.totalPhp)}
+            Order placed. We'll verify your payment of {formatPhpCurrency(placedOrder.totalPhp)}, then prepare your bouquet for pick-up.
             {" "}<Link to="/orders" className="order-track-link">Track your order</Link>
           </div>
         ) : null}
@@ -244,9 +291,9 @@ export const CheckoutPage = ({ account, items, siteContent, onOrderPlaced }: Che
             type="button"
             className="order-confirm-button"
             onClick={handleConfirm}
-            disabled={isConfirming || isConfirmed}
+            disabled={isConfirming || isConfirmed || methods.length === 0 || !proofFile}
           >
-            {isConfirming ? "Confirming..." : isConfirmed ? "Confirmed" : "Confirm Order"}
+            {isConfirming ? "Submitting..." : isConfirmed ? "Submitted" : "Submit Payment"}
           </button>
         </div>
       </div>

@@ -29,12 +29,18 @@ export const validatePasswordMatch = (password: string, confirmation: string) =>
   return password === confirmation ? undefined : "Passwords do not match";
 };
 
-export const validateFullName = (value: string) => {
-  const name = value.trim();
+// First or last name; label is "First name" or "Last name".
+export const validateName = (value: string, label: string) => {
+  const name = value.trim().replace(/\s+/g, " ");
   if (!name) {
-    return "Full name is required";
+    return `${label} is required`;
   }
-  return name.length > 120 ? "Full name must be at most 120 characters" : undefined;
+  if (name.length > 60) {
+    return `${label} must be at most 60 characters`;
+  }
+  return /^\p{L}[\p{L}\p{M} .'-]*$/u.test(name)
+    ? undefined
+    : `${label} can only contain letters, spaces, hyphens, apostrophes, and periods`;
 };
 
 export const validateContactNumber = (value: string) => {
@@ -47,3 +53,16 @@ export const validateContactNumber = (value: string) => {
 
 export const validateOtpCode = (value: string) =>
   /^\d{6}$/.test(value.trim()) ? undefined : "Enter the 6-digit code from your email";
+
+export const IMAGE_UPLOAD_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_IMAGE_UPLOAD_BYTES = 2 * 1024 * 1024;
+
+// Uploads (screenshots, QR codes) accept the same files as the API: JPG, PNG, or WebP up to 2 MB.
+export const validateImageFile = (file: File) => {
+  if (!IMAGE_UPLOAD_TYPES.includes(file.type)) {
+    return "Use a JPG, PNG, or WebP image.";
+  }
+  return file.size > MAX_IMAGE_UPLOAD_BYTES
+    ? `This image is ${(file.size / 1024 / 1024).toFixed(1)} MB; the limit is 2 MB.`
+    : undefined;
+};

@@ -3,7 +3,16 @@ import { Router } from "express";
 import type { RowDataPacket } from "mysql2";
 import { consumeOtp, issueOtp, type OtpPurpose } from "../auth/otp.js";
 import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword } from "../auth/password.js";
-import { createSession, deleteSession, deleteUserSessions, toAccount, type AccountRole } from "../auth/sessions.js";
+import {
+  createSession,
+  deleteSession,
+  deleteUserSessions,
+  joinName,
+  toAccount,
+  toAuthUser,
+  USER_COLUMNS,
+  type UserRow
+} from "../auth/sessions.js";
 import { pool } from "../db/pool.js";
 import { bearerToken, currentUser, requireAuth } from "../middleware/auth.js";
 import { HttpError } from "../middleware/errorHandler.js";
@@ -13,21 +22,19 @@ import {
   isDuplicateEntry,
   requireContactNumber,
   requireEmail,
+  requireName,
   requireNewPassword,
   requireOneOf,
   requireOtpCode,
   requireString
 } from "../utils/validate.js";
 
-interface LoginRow extends RowDataPacket {
-  id: string;
-  role: AccountRole;
-  full_name: string;
-  email: string;
-  contact_number: string | null;
+interface LoginRow extends UserRow {
   password_hash: string;
   status: "Active" | "Disabled";
 }
+
+const LOGIN_SELECT = `SELECT ${USER_COLUMNS.join(", ")}, password_hash, status FROM users`;
 
 export const authRouter = Router();
 
@@ -37,7 +44,7 @@ authRouter.post("/login", async (req, res) => {
   const password = forField("password", () => requireString(body.password, "Password", 200));
 
   const [rows] = await pool.query<LoginRow[]>(
-    "SELECT id, role, full_name, email, contact_number, password_hash, status FROM users WHERE email = ?",
+    `${LOGIN_SELECT} WHERE email = ?`,
     [email]
   );
   const row = rows[0];
@@ -53,13 +60,7 @@ authRouter.post("/login", async (req, res) => {
   const token = await createSession(row.id);
   res.json({
     token,
-    account: toAccount({
-      id: row.id,
-      role: row.role,
-      fullName: row.full_name,
-      email: row.email,
-      contactNumber: row.contact_number ?? ""
-    })
+    account: toAccount(toAuthUser(row))
   });
 });
 
@@ -102,7 +103,7 @@ authRouter.post("/password/reset", async (req, res) => {
   const password = forField("password", () => requireNewPassword(body.password));
 
   const [rows] = await pool.query<LoginRow[]>(
-    "SELECT id, role, full_name, email, contact_number, password_hash, status FROM users WHERE email = ? AND status = 'Active'",
+    `${LOGIN_SELECT} WHERE email = ? AND status = 'Active'`,
     [email]
   );
   const row = rows[0];
@@ -118,19 +119,15 @@ authRouter.post("/password/reset", async (req, res) => {
   const token = await createSession(row.id);
   res.json({
     token,
-    account: toAccount({
-      id: row.id,
-      role: row.role,
-      fullName: row.full_name,
-      email: row.email,
-      contactNumber: row.contact_number ?? ""
-    })
+    account: toAccount(toAuthUser(row))
   });
 });
 
 authRouter.post("/register", async (req, res) => {
   const body = bodyOf(req);
-  const fullName = forField("fullName", () => requireString(body.fullName, "Full name", 120));
+  const firstName = forField("firstName", () => requireName(body.firstName, "First name"));
+  const lastName = forField("lastName", () => requireName(body.lastName, "Last name"));
+  const fullName = joinName(firstName, lastName);
   const email = forField("email", () => requireEmail(body.email));
   const password = forField("password", () => requireNewPassword(body.password));
   const contactNumber = forField("contactNumber", () => requireContactNumber(body.contactNumber));
@@ -145,8 +142,9 @@ authRouter.post("/register", async (req, res) => {
 
   try {
     await pool.query(
-      "INSERT INTO users (id, role, full_name, email, password_hash, contact_number) VALUES (?, 'user', ?, ?, ?, ?)",
-      [id, fullName, email, await hashPassword(password), contactNumber]
+      `INSERT INTO users (id, role, first_name, last_name, full_name, email, password_hash, contact_number)
+       VALUES (?, 'user', ?, ?, ?, ?, ?, ?)`,
+      [id, firstName, lastName, fullName, email, await hashPassword(password), contactNumber]
     );
   } catch (error) {
     if (isDuplicateEntry(error)) {
@@ -156,7 +154,7 @@ authRouter.post("/register", async (req, res) => {
   }
 
   const token = await createSession(id);
-  res.status(201).json({ token, account: toAccount({ id, role: "user", fullName, email, contactNumber }) });
+  res.status(201).json({ token, account: toAccount({ id, role: "user", firstName, lastName, fullName, email, contactNumber, avatarUrl: null }) });
 });
 
 authRouter.get("/me", requireAuth, (_req, res) => {

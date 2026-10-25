@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { config } from "../config.js";
 import { HttpError } from "../middleware/errorHandler.js";
 
-const { cloudName, apiKey, apiSecret, folder } = config.cloudinary;
+const { cloudName, apiKey, apiSecret, folder: productFolder, avatarFolder } = config.cloudinary;
+
+// One image per account, replaced on each upload.
+export const avatarPublicId = (userId: string) => `${avatarFolder}/${userId}`;
 
 export const isCloudinaryConfigured = () => Boolean(cloudName && apiKey && apiSecret);
 
@@ -29,16 +32,23 @@ interface CloudinaryUploadResponse {
 }
 
 // With publicId (full path, e.g. "shop/catalog/rose1") the upload is idempotent: an existing asset
-// is kept and returned instead of creating a duplicate. Without it, Cloudinary names the file.
-export const uploadImage = async (image: Buffer, mimeType: string, options: { publicId?: string } = {}) => {
+// is kept and returned instead of creating a duplicate, unless replace is set, which overwrites it
+// and clears the CDN cache. Without publicId, Cloudinary names the file inside folder (default: products).
+export const uploadImage = async (
+  image: Buffer,
+  mimeType: string,
+  options: { publicId?: string; replace?: boolean; folder?: string } = {}
+) => {
   if (!isCloudinaryConfigured()) {
     throw new HttpError(503, "Image uploads are not configured on the server");
   }
 
   const timestamp = String(Math.floor(Date.now() / 1000));
   const params: Record<string, string> = options.publicId
-    ? { public_id: options.publicId, overwrite: "false", timestamp }
-    : { folder, timestamp };
+    ? options.replace
+      ? { public_id: options.publicId, overwrite: "true", invalidate: "true", timestamp }
+      : { public_id: options.publicId, overwrite: "false", timestamp }
+    : { folder: options.folder ?? productFolder, timestamp };
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(image)], { type: mimeType }));
   form.append("api_key", apiKey);

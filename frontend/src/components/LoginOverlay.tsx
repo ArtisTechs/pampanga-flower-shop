@@ -2,11 +2,12 @@ import { FormEvent, useEffect, useState, type InputHTMLAttributes, type ReactNod
 import { NavLink } from "react-router";
 import { ApiError, errorMessage } from "../api/client";
 import { requestOtp } from "../api/shop";
+import { PasswordInput } from "./PasswordInput";
 import type { OtpPurpose, RegisterInput, ResetPasswordInput } from "../types/shop";
 import {
   validateContactNumber,
   validateEmail,
-  validateFullName,
+  validateName,
   validateNewPassword,
   validateOtpCode,
   validatePasswordMatch
@@ -21,10 +22,10 @@ interface LoginOverlayProps {
 }
 
 type AuthMode = "signin" | "signup" | "reset";
-type FieldName = "fullName" | "email" | "password" | "confirmPassword" | "contactNumber" | "code";
+type FieldName = "firstName" | "lastName" | "email" | "password" | "confirmPassword" | "contactNumber" | "code";
 type FormErrors = Partial<Record<FieldName | "form", string>>;
 
-const FIELD_NAMES: FieldName[] = ["fullName", "email", "password", "confirmPassword", "contactNumber", "code"];
+const FIELD_NAMES: FieldName[] = ["firstName", "lastName", "email", "password", "confirmPassword", "contactNumber", "code"];
 const RESEND_COOLDOWN_SECONDS = 60;
 
 const TITLES: Record<AuthMode, string> = {
@@ -45,17 +46,19 @@ interface LoginFieldProps extends InputHTMLAttributes<HTMLInputElement> {
 // Input with its error (or hint) shown directly underneath.
 const LoginField = ({ name, error, hint, action, ...inputProps }: LoginFieldProps) => {
   const messageId = `login-${name}-message`;
+  const sharedProps = {
+    name,
+    "aria-label": inputProps.placeholder,
+    "aria-invalid": error ? true : undefined,
+    "aria-describedby": error || hint ? messageId : undefined
+  };
 
   return (
     <div className="login-field">
       <div className={action ? "login-field-row" : undefined}>
-        <input
-          name={name}
-          aria-label={inputProps.placeholder}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error || hint ? messageId : undefined}
-          {...inputProps}
-        />
+        {inputProps.type === "password"
+          ? <PasswordInput {...sharedProps} {...inputProps} />
+          : <input {...sharedProps} {...inputProps} />}
         {action}
       </div>
       {error ? (
@@ -71,7 +74,8 @@ export const LoginOverlay = ({ shopName, onLogin, onRegister, onResetPassword, o
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [code, setCode] = useState("");
@@ -169,7 +173,8 @@ export const LoginOverlay = ({ shopName, onLogin, onRegister, onResetPassword, o
 
     if (authMode === "signup") {
       const nextErrors: FormErrors = {
-        fullName: validateFullName(fullName),
+        firstName: validateName(firstName, "First name"),
+        lastName: validateName(lastName, "Last name"),
         email: validateEmail(email),
         code: validateEmail(email) ? undefined : validateCodeField(),
         contactNumber: validateContactNumber(contactNumber),
@@ -181,7 +186,8 @@ export const LoginOverlay = ({ shopName, onLogin, onRegister, onResetPassword, o
       }
       await submit(
         () => onRegister({
-          fullName: fullName.trim(),
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
           email: email.trim(),
           password,
           contactNumber: contactNumber.trim(),
@@ -312,15 +318,26 @@ export const LoginOverlay = ({ shopName, onLogin, onRegister, onResetPassword, o
           >
             {authMode === "signup" ? (
               <>
-                <LoginField
-                  name="fullName"
-                  type="text"
-                  autoComplete="name"
-                  value={fullName}
-                  onChange={(event) => updateField("fullName", setFullName)(event.target.value)}
-                  placeholder="Enter Full Name"
-                  error={errors.fullName}
-                />
+                <div className="login-name-row">
+                  <LoginField
+                    name="firstName"
+                    type="text"
+                    autoComplete="given-name"
+                    value={firstName}
+                    onChange={(event) => updateField("firstName", setFirstName)(event.target.value)}
+                    placeholder="First Name"
+                    error={errors.firstName}
+                  />
+                  <LoginField
+                    name="lastName"
+                    type="text"
+                    autoComplete="family-name"
+                    value={lastName}
+                    onChange={(event) => updateField("lastName", setLastName)(event.target.value)}
+                    placeholder="Last Name"
+                    error={errors.lastName}
+                  />
+                </div>
                 <LoginField
                   name="email"
                   type="email"

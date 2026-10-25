@@ -1,12 +1,11 @@
-import express, { Router } from "express";
+import { Router } from "express";
 import type { RowDataPacket } from "mysql2";
 import { pool } from "../../db/pool.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { isCloudinaryImageUrl, uploadImage } from "../../services/cloudinary.js";
+import { rawImageBody, requireUploadedImage } from "../../utils/images.js";
 import { bodyOf, requireId, requireString } from "../../utils/validate.js";
 
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 const MAX_PRICE_PHP = 1_000_000;
 
 interface AdminProductRow extends RowDataPacket {
@@ -39,17 +38,6 @@ const toAdminProduct = (row: AdminProductRow) => ({
   bestSeller: Boolean(row.best_seller),
   active: Boolean(row.is_active)
 });
-
-// Checks the file signature too, not just the Content-Type header the client sent.
-const hasImageSignature = (data: Buffer, type: (typeof IMAGE_TYPES)[number]) => {
-  if (type === "image/jpeg") {
-    return data.length > 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
-  }
-  if (type === "image/png") {
-    return data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-  }
-  return data.subarray(0, 4).toString("latin1") === "RIFF" && data.subarray(8, 12).toString("latin1") === "WEBP";
-};
 
 // All product images live on Cloudinary (seeded ones were moved by `npm run images:migrate`).
 const requireImagePath = (value: unknown) => {
@@ -161,19 +149,8 @@ adminProductsRouter.patch("/products/:id", async (req, res) => {
 });
 
 // Raw image body (Content-Type: image/jpeg|png|webp, max 2 MB) -> uploaded to Cloudinary.
-adminProductsRouter.post(
-  "/uploads/product-image",
-  express.raw({ type: [...IMAGE_TYPES], limit: MAX_IMAGE_BYTES }),
-  async (req, res) => {
-    const type = IMAGE_TYPES.find((imageType) => req.is(imageType));
-    if (!type || !Buffer.isBuffer(req.body) || req.body.length === 0) {
-      throw new HttpError(415, "Upload a JPG, PNG, or WebP image");
-    }
-    if (!hasImageSignature(req.body, type)) {
-      throw new HttpError(415, "The file is not a valid JPG, PNG, or WebP image");
-    }
-
-    const { url } = await uploadImage(req.body, type);
-    res.status(201).json({ url });
-  }
-);
+adminProductsRouter.post("/uploads/product-image", rawImageBody, async (req, res) => {
+  const { image, type } = requireUploadedImage(req);
+  const { url } = await uploadImage(image, type);
+  res.status(201).json({ url });
+});

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { RowDataPacket } from "mysql2";
+import { loadPaymentMethods } from "../db/paymentMethods.js";
 import { pool } from "../db/pool.js";
 import { getSiteContent } from "../db/siteContent.js";
 
@@ -85,4 +86,9 @@ contentRouter.get("/home", async (_req, res) => {
     steps,
     testimonials: testimonials.map((row) => ({ id: row.id, name: row.author_name, quote: row.quote, rating: row.rating }))
   });
+});
+
+// Where customers send payment at checkout (QR codes, account names and numbers).
+contentRouter.get("/payment-methods", async (_req, res) => {
+  res.json(await loadPaymentMethods(true));
 });

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { errorMessage } from "../api/client";
-import { fetchAdminOrders, updateOrderStatus } from "../api/shop";
+import { fetchAdminOrders, reviewOrderPayment, updateOrderStatus } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
 import { LoadState } from "../components/LoadState";
 import { AdminLayout } from "../components/admin/AdminLayout";
@@ -9,10 +9,10 @@ import { AdminOrderDetailsDialog } from "../components/admin/AdminOrderDetailsDi
 import { AdminOrdersTable, ORDER_STATUSES } from "../components/admin/AdminOrdersTable";
 import { AdminPageHeader, AdminSegments, AdminUiIcon } from "../components/admin/AdminUi";
 import { useApiData } from "../hooks/useApiData";
-import type { Account, AdminOrderStatus } from "../types/shop";
+import type { Account, AdminOrder, AdminOrderStatus } from "../types/shop";
 
-type OrderFilter = "All" | AdminOrderStatus;
-const ORDER_FILTERS: readonly OrderFilter[] = ["All", ...ORDER_STATUSES];
+type OrderFilter = "All" | "To verify" | AdminOrderStatus;
+const ORDER_FILTERS: readonly OrderFilter[] = ["All", "To verify", ...ORDER_STATUSES];
 
 interface AdminOrdersPageProps {
   account: Account;
@@ -22,7 +22,7 @@ interface AdminOrdersPageProps {
 
 export const AdminOrdersPage = ({ account, onLogout, onToast }: AdminOrdersPageProps) => {
   const [searchParams] = useSearchParams();
-  // ?status=Pending (e.g. from the dashboard) preselects a tab.
+  // ?status=Pending or ?status=To verify (e.g. from the dashboard) preselects a tab.
   const initialFilter = ORDER_FILTERS.find((filter) => filter === searchParams.get("status")) ?? "All";
   const [activeFilter, setActiveFilter] = useState<OrderFilter>(initialFilter);
   const [search, setSearch] = useState("");
@@ -33,9 +33,12 @@ export const AdminOrdersPage = ({ account, onLogout, onToast }: AdminOrdersPageP
   const viewingOrder = allOrders.find((order) => order.id === viewingOrderId) ?? null;
 
   const counts = useMemo(() => {
-    const result: Record<OrderFilter, number> = { All: allOrders.length, Pending: 0, Ready: 0, Completed: 0 };
+    const result: Record<OrderFilter, number> = { All: allOrders.length, "To verify": 0, Pending: 0, Ready: 0, Completed: 0 };
     allOrders.forEach((order) => {
       result[order.status] += 1;
+      if (order.paymentStatus === "For verification") {
+        result["To verify"] += 1;
+      }
     });
     return result;
   }, [allOrders]);
@@ -43,18 +46,43 @@ export const AdminOrdersPage = ({ account, onLogout, onToast }: AdminOrdersPageP
   const visibleOrders = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return allOrders.filter((order) =>
-      (activeFilter === "All" || order.status === activeFilter)
+      (activeFilter === "All"
+        || order.status === activeFilter
+        || (activeFilter === "To verify" && order.paymentStatus === "For verification"))
       && (normalizedSearch === ""
         || order.customerName.toLowerCase().includes(normalizedSearch)
         || order.contactNumber.replace(/\s+/g, "").includes(normalizedSearch.replace(/\s+/g, "")))
     );
   }, [activeFilter, allOrders, search]);
 
+  const replaceOrder = (updatedOrder: AdminOrder) =>
+    orders.updateData((current) => current.map((order) => (order.id === updatedOrder.id ? updatedOrder : order)));
+
+  const handlePaymentReview = async (orderId: string, decision: "Verified" | "Rejected", note?: string) => {
+    setUpdatingOrderId(orderId);
+    try {
+      const updatedOrder = await reviewOrderPayment(orderId, decision, note);
+      replaceOrder(updatedOrder);
+      onToast(
+        decision === "Verified"
+          ? `${updatedOrder.customerName}'s payment is verified. You can now prepare the order.`
+          : `${updatedOrder.customerName}'s payment was rejected. They can upload a new screenshot.`,
+        "success"
+      );
+      return true;
+    } catch (error) {
+      onToast(errorMessage(error), "error");
+      return false;
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
   const handleStatusChange = async (orderId: string, status: AdminOrderStatus) => {
     setUpdatingOrderId(orderId);
     try {
       const updatedOrder = await updateOrderStatus(orderId, status);
-      orders.updateData((current) => current.map((order) => (order.id === orderId ? updatedOrder : order)));
+      replaceOrder(updatedOrder);
       onToast(`${updatedOrder.customerName}'s order is now ${status}.`, "success");
     } catch (error) {
       onToast(errorMessage(error), "error");
@@ -69,7 +97,7 @@ export const AdminOrdersPage = ({ account, onLogout, onToast }: AdminOrdersPageP
         <AdminPageHeader
           title="Orders"
           subtitle={orders.data
-            ? `${counts.All} orders · ${counts.Pending + counts.Ready} waiting for pick-up`
+            ? `${counts.All} orders · ${counts["To verify"]} payments to verify · ${counts.Pending + counts.Ready} waiting for pick-up`
             : "Track pick-ups and update order status"}
         />
 
@@ -115,6 +143,7 @@ export const AdminOrdersPage = ({ account, onLogout, onToast }: AdminOrdersPageP
           order={viewingOrder}
           isUpdating={updatingOrderId === viewingOrder.id}
           onStatusChange={handleStatusChange}
+          onPaymentReview={handlePaymentReview}
           onClose={() => setViewingOrderId(null)}
         />
       ) : null}
