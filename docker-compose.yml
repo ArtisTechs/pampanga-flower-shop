@@ -43,12 +43,15 @@ services:
       # Customizer preview images; leave the credentials empty to show the closest stock preview instead.
       IMAGE_PROVIDER: ${IMAGE_PROVIDER:-cloudflare}
       IMAGE_GENERATIONS_PER_HOUR: ${IMAGE_GENERATIONS_PER_HOUR:-20}
+      PREVIEW_MAX_ATTEMPTS: ${PREVIEW_MAX_ATTEMPTS:-3}
       CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
       CLOUDFLARE_AI_TOKEN: ${CLOUDFLARE_AI_TOKEN:-}
       CLOUDFLARE_IMAGE_MODEL: ${CLOUDFLARE_IMAGE_MODEL:-@cf/black-forest-labs/flux-2-klein-4b}
       CLOUDFLARE_IMAGE_STEPS: ${CLOUDFLARE_IMAGE_STEPS:-8}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_IMAGE_MODEL: ${GEMINI_IMAGE_MODEL:-gemini-2.5-flash-image}
+      GEMINI_CHECK_MODEL: ${GEMINI_CHECK_MODEL:-gemini-flash-latest}
+      GEMINI_CHECK_FALLBACK_MODEL: ${GEMINI_CHECK_FALLBACK_MODEL:-gemini-flash-lite-latest}
       # OTP emails; leave empty to print codes in the backend logs instead.
       BREVO_API_KEY: ${BREVO_API_KEY:-}
       MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { errorMessage } from "../api/client";
 import { fetchMyOrder, fetchMyOrders, uploadPaymentProof } from "../api/shop";
+import { CustomBouquetDetails, orderItemBouquetSummary } from "../components/CustomBouquetDetails";
 import { LoadState } from "../components/LoadState";
 import { PaymentAccountCard } from "../components/PaymentMethodPicker";
 import { PaymentProofInput } from "../components/PaymentProofInput";
@@ -54,25 +55,20 @@ const OrderDetails = ({ orderId }: { orderId: string }) => {
 
   return (
     <ul className="my-order-items">
-      {order.items.map((item) => (
-        <li key={item.id} className="my-order-item">
-          {item.image ? <img src={item.image} alt="" /> : <span className="my-order-item-placeholder" aria-hidden="true">✿</span>}
-          <div>
-            <h3>{item.customization ? `Custom ${item.customization.size} Bouquet` : item.name}</h3>
-            {item.customization ? (
-              <p>
-                {item.customization.palette} · {item.customization.wrap} · {item.customization.ribbon}
-              </p>
-            ) : null}
-            {item.flowers.length > 0 ? (
-              <p>{item.flowers.map((flower) => `${flower.name} ×${flower.quantity}`).join(", ")}</p>
-            ) : null}
-            {item.customization?.fillers?.length ? <p>Fillers: {item.customization.fillers.join(", ")}</p> : null}
-          </div>
-          <span className="my-order-item-qty">×{item.quantity}</span>
-          <strong>{formatPhpCurrency(item.unitPricePhp * item.quantity)}</strong>
-        </li>
-      ))}
+      {order.items.map((item) => {
+        const summary = orderItemBouquetSummary(item);
+        return (
+          <li key={item.id} className="my-order-item">
+            {item.image ? <img src={item.image} alt="" /> : <span className="my-order-item-placeholder" aria-hidden="true">✿</span>}
+            <div>
+              <h3>{summary ? `Custom ${summary.size} Bouquet` : item.name}</h3>
+              {summary ? <CustomBouquetDetails summary={summary} className="my-order-item-details" /> : null}
+            </div>
+            <span className="my-order-item-qty">×{item.quantity}</span>
+            <strong>{formatPhpCurrency(item.unitPricePhp * item.quantity)}</strong>
+          </li>
+        );
+      })}
     </ul>
   );
 };

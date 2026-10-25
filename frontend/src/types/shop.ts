@@ -91,6 +91,16 @@ export interface BouquetSelection {
   fillers: string[];
 }
 
+/** A custom bouquet's choices by display name, for showing what the customer picked. */
+export interface CustomBouquetSummary {
+  size: string;
+  palette: string;
+  wrap: string;
+  ribbon: string;
+  flowers: Array<{ name: string; quantity: number }>;
+  fillers: string[];
+}
+
 export interface ProductItem {
   id: string;
   name: string;
@@ -103,6 +113,8 @@ export interface ProductItem {
     selection: BouquetSelection;
     wrapName: string;
     ribbonName: string;
+    /** Missing on cart items saved before it existed. */
+    summary?: CustomBouquetSummary;
   };
 }
 

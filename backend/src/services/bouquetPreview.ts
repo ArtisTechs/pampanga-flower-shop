@@ -5,11 +5,18 @@ import {
   saveGeneratedPreview,
   selectionKey,
   type BouquetSelection,
+  type BuilderOption,
   type BuilderPreview
 } from "../db/builder.js";
 import { HttpError } from "../middleware/errorHandler.js";
 import { isCloudinaryImageUrl, uploadImage } from "./cloudinary.js";
+import { inspectImage, isGeminiConfigured } from "./gemini.js";
 import { generateImage, isImageGenerationConfigured, supportsReferenceImages } from "./imageGeneration.js";
+
+interface InlineImage {
+  mimeType: string;
+  data: Buffer;
+}
 
 // Image models follow plain sentences with spelled-out counts and named colors far better than lists or
 // hex codes, so every choice is turned into words. Unknown codes fall back to the option's own name.
@@ -140,39 +147,63 @@ const countWord = (count: number) => NUMBER_WORDS[count] ?? String(count);
 const listText = (items: string[]) =>
   items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 
+// "two deep red roses", "one golden yellow sunflower with dark brown centers"
+const flowerPhrase = (selection: BouquetSelection, option: BuilderOption, quantity: number) => {
+  const { palette } = selection;
+  const look = FLOWER_LOOKS[option.code];
+  if (!look) {
+    return `${countWord(quantity)} ${palette.name.toLowerCase()} ${option.name.toLowerCase()}`;
+  }
+  const color = look.colors[palette.code] ?? DEFAULT_FLOWER_COLORS[option.code] ?? palette.name.toLowerCase();
+  return `${countWord(quantity)} ${(quantity === 1 ? look.singular : look.plural).replace("{color}", color)}${look.detail}`;
+};
+
+const fillerPhrase = (selection: BouquetSelection, filler: BuilderOption) =>
+  (FILLER_WORDS[filler.code] ?? filler.name.toLowerCase()).replace("{aster}", ASTER_COLORS[selection.palette.code] ?? "white");
+
+const wrapPhrase = (selection: BouquetSelection, paperColor: string) =>
+  (WRAP_WORDS[selection.wrap.code] ?? `${selection.wrap.name.toLowerCase()} wrapping`).replace("{paper}", paperColor);
+
+// Where each flower sits, by total flower count; larger bouquets are described by counts only.
+const FLOWER_SLOTS: Record<number, string[]> = {
+  1: ["in the center"],
+  2: ["on the left", "on the right"],
+  3: ["on the left", "in the center", "on the right"],
+  4: ["at the back left", "at the back right", "at the front left", "at the front right"],
+  5: ["at the back left", "at the back center", "at the back right", "at the front left", "at the front right"],
+  6: ["at the back left", "at the back center", "at the back right", "at the front left", "at the front center", "at the front right"]
+};
+
 // Patterned on the shop's existing customizer photos: a single wrapped bouquet, centered, front view,
 // on a plain white studio background with a soft shadow.
 export const buildPreviewPrompt = (selection: BouquetSelection, hasReference: boolean) => {
-  const { palette, wrap, ribbon } = selection;
+  const { palette, ribbon } = selection;
   const paperColor = PALETTE_PAPER_COLORS[palette.code] ?? "soft-colored";
   const ribbonColor = PALETTE_RIBBON_COLORS[palette.code] ?? palette.name.toLowerCase();
 
   const flowerText = listText(
-    selection.flowers.map(({ option, quantity }) => {
-      const look = FLOWER_LOOKS[option.code];
-      if (!look) {
-        return `${countWord(quantity)} ${palette.name.toLowerCase()} ${option.name.toLowerCase()}`;
-      }
-      const color = look.colors[palette.code] ?? DEFAULT_FLOWER_COLORS[option.code] ?? palette.name.toLowerCase();
-      return `${countWord(quantity)} ${(quantity === 1 ? look.singular : look.plural).replace("{color}", color)}${look.detail}`;
-    })
+    selection.flowers.map(({ option, quantity }) => flowerPhrase(selection, option, quantity))
   );
   const totalStems = selection.flowers.reduce((total, flower) => total + flower.quantity, 0);
   const fillerText = selection.fillers.length > 0
-    ? `, plus ${listText(
-        selection.fillers.map((filler) =>
-          (FILLER_WORDS[filler.code] ?? filler.name.toLowerCase()).replace("{aster}", ASTER_COLORS[palette.code] ?? "white")
-        )
-      )}`
+    ? `, plus ${listText(selection.fillers.map((filler) => fillerPhrase(selection, filler)))}`
     : ", with only a few small green leaves and no filler flowers";
-  const wrapText = (WRAP_WORDS[wrap.code] ?? `${wrap.name.toLowerCase()} wrapping`).replace("{paper}", paperColor);
+  const wrapText = wrapPhrase(selection, paperColor);
   const ribbonText = (RIBBON_WORDS[ribbon.code] ?? `a ${ribbon.name.toLowerCase()} bow`).replace("{ribbon}", ribbonColor);
+
+  // Image models keep counts far better when each flower has its own spot.
+  const slots = FLOWER_SLOTS[totalStems];
+  const stems = selection.flowers.flatMap(({ option, quantity }) => Array.from({ length: quantity }, () => option));
+  const layoutText = slots
+    ? `Arrangement: ${listText(stems.map((option, index) => `${flowerPhrase(selection, option, 1)} ${slots[index]}`))}.`
+    : null;
 
   return [
     hasReference
       ? "Match the attached shop photo's style (camera angle, framing, white background, shadow, lighting), but not its flowers, colors, paper or ribbon."
       : null,
     `Photorealistic studio product photo of a florist bouquet with exactly ${flowerText}${fillerText}.`,
+    layoutText,
     `It has exactly ${countWord(totalStems)} main ${totalStems === 1 ? "flower" : "flowers"} in total, each clearly visible, and no other kinds of flowers.`,
     `Wrapped in ${wrapText}, tied around the stems with ${ribbonText}.`,
     "Centered, front view, the whole bouquet in frame with white space around it, on a pure white background with a soft shadow.",
@@ -181,6 +212,90 @@ export const buildPreviewPrompt = (selection: BouquetSelection, hasReference: bo
   ]
     .filter((line) => line !== null)
     .join("\n");
+};
+
+interface PreviewCheck {
+  flowers: Array<{ name: string; countSeen: number; colorMatches: boolean }>;
+  otherMainFlowers: string[];
+  fillersMissing: string[];
+  wrapMatches: boolean;
+  realistic: boolean;
+}
+
+// Image models still miscount at times; a vision model compares each new image with the order first.
+const buildCheckPrompt = (selection: BouquetSelection) => {
+  const paperColor = PALETTE_PAPER_COLORS[selection.palette.code] ?? "soft-colored";
+  return [
+    "You are checking a product photo of a florist bouquet against the customer's order before it is shown to them.",
+    "Order:",
+    ...selection.flowers.map(({ option, quantity }) => `- ${option.name}: ${flowerPhrase(selection, option, quantity)}`),
+    selection.fillers.length > 0
+      ? `- Fillers: ${listText(selection.fillers.map((filler) => fillerPhrase(selection, filler)))}`
+      : "- Fillers: none",
+    `- Wrap: ${wrapPhrase(selection, paperColor)}`,
+    "Count each listed main flower one by one, including partly hidden ones, and say whether their color matches the order.",
+    "List any other kinds of main flowers you see; fillers, leaves and greenery don't count.",
+    "List the ordered fillers you can't see. Say whether the wrap style matches, and whether every flower looks like a real flower in a natural, real-life color."
+  ].join("\n");
+};
+
+const checkSchema = (selection: BouquetSelection) => ({
+  type: "OBJECT",
+  properties: {
+    flowers: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", enum: selection.flowers.map(({ option }) => option.name) },
+          countSeen: { type: "INTEGER" },
+          colorMatches: { type: "BOOLEAN" }
+        },
+        required: ["name", "countSeen", "colorMatches"]
+      }
+    },
+    otherMainFlowers: { type: "ARRAY", items: { type: "STRING" } },
+    fillersMissing: { type: "ARRAY", items: { type: "STRING" } },
+    wrapMatches: { type: "BOOLEAN" },
+    realistic: { type: "BOOLEAN" }
+  },
+  required: ["flowers", "otherMainFlowers", "fillersMissing", "wrapMatches", "realistic"]
+});
+
+const isPreviewCheck = (value: unknown): value is PreviewCheck =>
+  typeof value === "object" && value !== null && Array.isArray((value as PreviewCheck).flowers);
+
+// What's wrong with the image ([] when it matches), or "unchecked" when no model could check it (quota, outage).
+const findPreviewProblems = async (image: InlineImage, selection: BouquetSelection): Promise<string[] | "unchecked"> => {
+  const result = await inspectImage(buildCheckPrompt(selection), image, checkSchema(selection));
+  if (!isPreviewCheck(result)) {
+    return "unchecked";
+  }
+
+  const problems: string[] = [];
+  for (const { option, quantity } of selection.flowers) {
+    const seen = result.flowers.find((flower) => flower.name === option.name);
+    // Big overlapping bunches are hard to count exactly, even for a person looking at the photo.
+    const tolerance = quantity > 6 ? 1 : 0;
+    if (!seen || Math.abs(seen.countSeen - quantity) > tolerance) {
+      problems.push(`${option.name}: expected ${quantity}, saw ${seen?.countSeen ?? 0}`);
+    } else if (!seen.colorMatches) {
+      problems.push(`${option.name}: wrong color`);
+    }
+  }
+  if (result.otherMainFlowers.length > 0) {
+    problems.push(`unexpected flowers: ${result.otherMainFlowers.join(", ")}`);
+  }
+  if (result.fillersMissing.length > 0) {
+    problems.push(`missing fillers: ${result.fillersMissing.join(", ")}`);
+  }
+  if (!result.wrapMatches) {
+    problems.push("wrong wrap style");
+  }
+  if (!result.realistic) {
+    problems.push("unrealistic flowers");
+  }
+  return problems;
 };
 
 // One stock photo as a style reference: same stem count and wrap if possible.
@@ -233,13 +348,38 @@ const generateAndStore = async (key: string, selection: BouquetSelection, previe
   // Only Gemini can follow a reference photo; the text-only model relies on the prompt's style description.
   const referenceUrl = supportsReferenceImages ? pickReference(selection, previews)?.image : undefined;
   const reference = referenceUrl ? await fetchReference(referenceUrl) : null;
-  const image = await generateImage(buildPreviewPrompt(selection, reference !== null), reference ? [reference] : []);
-  // replace: a leftover asset under this key was removed from the cache (e.g. by an admin) and is stale.
+  const prompt = buildPreviewPrompt(selection, reference !== null);
+
+  // With Gemini set up, only an image that passes the check is cached; after the last failed try the customizer
+  // shows the stock photo. An image no model could check is shown once but not cached, so a later visit retries.
+  const checksImages = isGeminiConfigured();
+  let image: InlineImage | null = null;
+  let isVerified = !checksImages;
+  for (let attempt = 1; attempt <= config.imageGeneration.maxAttempts && !image; attempt += 1) {
+    const candidate = await generateImage(prompt, reference ? [reference] : []);
+    const problems = checksImages ? await findPreviewProblems(candidate, selection) : [];
+    if (problems === "unchecked") {
+      image = candidate;
+    } else if (problems.length === 0) {
+      image = candidate;
+      isVerified = true;
+    } else {
+      console.warn(`Bouquet preview ${key} attempt ${attempt} rejected: ${problems.join("; ")}`);
+    }
+  }
+  if (!image) {
+    throw new HttpError(502, "We couldn't create an accurate preview for this bouquet.");
+  }
+  // replace: a leftover asset under this key was removed from the cache (e.g. by an admin) or is unchecked.
   const { url } = await uploadImage(image.data, image.mimeType, {
     publicId: `${config.cloudinary.builderPreviewFolder}/${key}`,
     replace: true
   });
-  await saveGeneratedPreview(key, describeSelection(selection), url, userId);
+  if (isVerified) {
+    await saveGeneratedPreview(key, describeSelection(selection), url, userId);
+  } else {
+    console.warn(`Bouquet preview ${key} couldn't be checked; shown without caching`);
+  }
   return url;
 };
 

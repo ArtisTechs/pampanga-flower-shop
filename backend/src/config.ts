@@ -29,7 +29,10 @@ export const config = {
   imageGeneration: {
     provider: process.env.IMAGE_PROVIDER === "gemini" ? "gemini" : "cloudflare",
     // New images one customer may trigger per hour; cached selections don't count.
-    generationsPerHour: Number(process.env.IMAGE_GENERATIONS_PER_HOUR ?? 20)
+    generationsPerHour: Number(process.env.IMAGE_GENERATIONS_PER_HOUR ?? 20),
+    // With GEMINI_API_KEY set, each new image is checked against the selection (flower counts, colors, wrap)
+    // and regenerated if it doesn't match, up to this many tries in total.
+    maxAttempts: Math.min(5, Math.max(1, Number(process.env.PREVIEW_MAX_ATTEMPTS ?? 3)))
   },
   cloudflareAi: {
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
@@ -41,7 +44,11 @@ export const config = {
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY ?? "",
-    imageModel: process.env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image"
+    imageModel: process.env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
+    // Checks generated bouquet previews (free tier). The "latest" alias survives Google retiring older versions.
+    checkModel: process.env.GEMINI_CHECK_MODEL ?? "gemini-flash-latest",
+    // Used when the check model is busy or rate-limited.
+    checkFallbackModel: process.env.GEMINI_CHECK_FALLBACK_MODEL ?? "gemini-flash-lite-latest"
   },
   // Optional: OTP emails go through Brevo. Without a key, development logs codes to the console
   // and production answers 503.

@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { HttpError } from "../middleware/errorHandler.js";
 
-const { apiKey, imageModel } = config.gemini;
+const { apiKey, imageModel, checkModel, checkFallbackModel } = config.gemini;
 
 export const isGeminiConfigured = () => Boolean(apiKey);
 
@@ -77,4 +77,52 @@ export const generateImage = async (prompt: string, references: InlineImage[] = 
     mimeType: part?.inlineData?.mimeType ?? part?.inline_data?.mime_type ?? "image/png",
     data: Buffer.from(data, "base64")
   };
+};
+
+// Image to structured JSON (https://ai.google.dev/gemini-api/docs/structured-output) with the text models, which
+// the free tier allows. A busy or rate-limited model hands over to the next one. Returns null if none answered.
+export const inspectImage = async (prompt: string, image: InlineImage, responseSchema: object): Promise<unknown> => {
+  if (!isGeminiConfigured()) {
+    return null;
+  }
+  for (const model of new Set([checkModel, checkFallbackModel])) {
+    const result = await inspectImageWith(model, prompt, image, responseSchema);
+    if (result !== null) {
+      return result;
+    }
+  }
+  return null;
+};
+
+const inspectImageWith = async (model: string, prompt: string, image: InlineImage, responseSchema: object) => {
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ inlineData: { mimeType: image.mimeType, data: image.data.toString("base64") } }, { text: prompt }]
+            }
+          ],
+          generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema }
+        }),
+        // A healthy check answers in a few seconds; past this the model is overloaded and the next one is tried.
+        signal: AbortSignal.timeout(20_000)
+      }
+    );
+    const result = (await response.json().catch(() => ({}))) as GeminiResponse;
+    const text = result.candidates?.[0]?.content?.parts?.find((entry) => entry.text)?.text;
+    if (!response.ok || !text) {
+      console.error(`Gemini image check with ${model} failed (${response.status}):`, result.error?.message ?? "no answer returned");
+      return null;
+    }
+    return JSON.parse(text) as unknown;
+  } catch (error) {
+    console.error(`Gemini image check with ${model} failed:`, error);
+    return null;
+  }
 };

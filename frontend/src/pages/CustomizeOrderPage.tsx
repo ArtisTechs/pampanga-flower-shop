@@ -3,9 +3,17 @@ import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
 import { fetchBouquetPreview, fetchBuilder } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
-import { LoadState } from "../components/LoadState";
+import { CustomBouquetDetails } from "../components/CustomBouquetDetails";
+import { LoadingBloom, LoadState } from "../components/LoadState";
 import { useApiData } from "../hooks/useApiData";
-import type { BouquetSelection, BuilderConfig, BuilderOption, BuilderPreview, ProductItem } from "../types/shop";
+import type {
+  BouquetSelection,
+  BuilderConfig,
+  BuilderOption,
+  BuilderPreview,
+  CustomBouquetSummary,
+  ProductItem
+} from "../types/shop";
 import { formatPhpCurrency } from "../utils/currency";
 
 type CustomizeStep = "flowers" | "style" | "preview";
@@ -110,6 +118,14 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
     ribbon: selectedRibbonOption.id,
     flowers: selectedFlowers.map((flower) => ({ code: flower.id, quantity: flowerCounts[flower.id] })),
     fillers: selectedFillerOptions.map((filler) => filler.id)
+  };
+  const bouquetSummary: CustomBouquetSummary = {
+    size: selectedSizeOption.name,
+    palette: selectedPaletteOption.name,
+    wrap: selectedWrapOption.name,
+    ribbon: selectedRibbonOption.name,
+    flowers: selectedFlowers.map((flower) => ({ name: flower.name, quantity: flowerCounts[flower.id] })),
+    fillers: selectedFillerOptions.map((filler) => filler.name)
   };
   const selectionSignature = JSON.stringify(selection);
   // Closest stock photo: shown if the exact preview can't be generated.
@@ -271,7 +287,8 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
       custom: {
         selection,
         wrapName: selectedWrapOption.name,
-        ribbonName: selectedRibbonOption.name
+        ribbonName: selectedRibbonOption.name,
+        summary: bouquetSummary
       }
     };
 
@@ -498,7 +515,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
             <div className="custom-preview-card">
               <div className={`custom-preview-image-wrap ${isPreviewLoading ? "is-loading" : ""}`} aria-busy={isPreviewLoading}>
                 {isPreviewLoading ? (
-                  <p className="custom-preview-loading" role="status">Arranging your bouquet preview…</p>
+                  <LoadingBloom label="Arranging your bouquet preview…" />
                 ) : (
                   <img src={previewImage} alt="Preview of your customized bouquet" />
                 )}
@@ -506,12 +523,8 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
               {currentPreview?.status === "failed" ? (
                 <p className="custom-preview-note">Showing a similar bouquet. Your florist will follow your exact choices.</p>
               ) : null}
+              <CustomBouquetDetails summary={bouquetSummary} className="custom-preview-details" />
               <div className="custom-preview-summary">
-                <span>{selectedSizeOption.name}</span>
-                {selectedFillerOptions.map((filler) => <span key={filler.id}>{filler.name}</span>)}
-                <span>{selectedPaletteOption.name}</span>
-                <span>{selectedWrapOption.name}</span>
-                <span>{selectedRibbonOption.name}</span>
                 <strong>{formatPhpCurrency(totalPrice)}</strong>
               </div>
               <div className="custom-preview-actions">

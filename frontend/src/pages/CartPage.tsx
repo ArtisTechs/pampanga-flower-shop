@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { CustomBouquetDetails } from "../components/CustomBouquetDetails";
 import { MAX_ITEM_QUANTITY } from "../hooks/useCart";
 import type { CartItem } from "../types/shop";
 import { formatPhpCurrency } from "../utils/currency";
@@ -32,7 +33,8 @@ export const CartPage = ({ items, onRemoveItem, onUpdateQuantity }: CartPageProp
               <article key={item.id} className="cart-item">
                 <img src={item.image} alt={item.name} />
                 <div>
-                  <h2>{item.name}</h2>
+                  <h2>{item.custom?.summary ? `Custom ${item.custom.summary.size} Bouquet` : item.name}</h2>
+                  {item.custom?.summary ? <CustomBouquetDetails summary={item.custom.summary} className="cart-item-details" /> : null}
                   <p>{formatPhpCurrency(item.pricePhp)}</p>
                 </div>
                 <div className="cart-item-quantity">

@@ -5,6 +5,7 @@ import type { AdminOrder, AdminOrderDetail, AdminOrderStatus } from "../../types
 import { resolveImagePath } from "../../utils/assets";
 import { formatPhpCurrency } from "../../utils/currency";
 import { formatShopDateTime } from "../../utils/dates";
+import { CustomBouquetDetails, orderItemBouquetSummary } from "../CustomBouquetDetails";
 import { LoadState } from "../LoadState";
 import { PaymentStatusBadge } from "../PaymentStatusBadge";
 import { AdminDialog, AdminUiIcon } from "./AdminUi";
@@ -185,32 +186,21 @@ export const AdminOrderDetailsDialog = ({ order, isUpdating, onStatusChange, onP
       <h3 className="admin-ui-section-title">Items to prepare</h3>
       {details.data ? (
         <ul className="admin-ui-order-items">
-          {details.data.items.map((item) => (
-            <li key={item.id}>
-              {item.image ? <img src={item.image} alt="" /> : <span className="admin-ui-order-item-placeholder" aria-hidden="true">💐</span>}
-              <div>
-                <strong>
-                  {item.quantity} × {item.customization ? `Custom ${item.customization.size} bouquet` : item.name}
-                </strong>
-                {item.customization ? (
-                  <p className="admin-ui-chips">
-                    <span>{item.customization.palette}</span>
-                    <span>{item.customization.wrap}</span>
-                    <span>{item.customization.ribbon}</span>
-                  </p>
-                ) : null}
-                {item.flowers.length > 0 ? (
-                  <p className="admin-ui-muted">
-                    Flowers: {item.flowers.map((flower) => `${flower.name} × ${flower.quantity}`).join(", ")}
-                  </p>
-                ) : null}
-                {item.customization?.fillers?.length ? (
-                  <p className="admin-ui-muted">Fillers: {item.customization.fillers.join(", ")}</p>
-                ) : null}
-              </div>
-              <span className="admin-ui-order-item-price">{formatPhpCurrency(item.unitPricePhp * item.quantity)}</span>
-            </li>
-          ))}
+          {details.data.items.map((item) => {
+            const summary = orderItemBouquetSummary(item);
+            return (
+              <li key={item.id}>
+                {item.image ? <img src={item.image} alt="" /> : <span className="admin-ui-order-item-placeholder" aria-hidden="true">💐</span>}
+                <div>
+                  <strong>
+                    {item.quantity} × {summary ? `Custom ${summary.size} bouquet` : item.name}
+                  </strong>
+                  {summary ? <CustomBouquetDetails summary={summary} className="admin-ui-bouquet-details" /> : null}
+                </div>
+                <span className="admin-ui-order-item-price">{formatPhpCurrency(item.unitPricePhp * item.quantity)}</span>
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <LoadState error={details.error} onRetry={details.reload} />
