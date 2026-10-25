@@ -235,7 +235,8 @@ const buildCheckPrompt = (selection: BouquetSelection) => {
     `- Wrap: ${wrapPhrase(selection, paperColor)}`,
     "Count each listed main flower one by one, including partly hidden ones, and say whether their color matches the order.",
     "List any other kinds of main flowers you see; fillers, leaves and greenery don't count.",
-    "List the ordered fillers you can't see. Say whether the wrap style matches, and whether every flower looks like a real flower in a natural, real-life color."
+    "List the ordered fillers you can't see. Say whether the wrap style matches, and whether every flower looks like a real flower.",
+    "Colors sold by florists count as real, including dyed blue flowers and very dark burgundy flowers; only fantasy colors (such as a pink sunflower) or fake-looking flowers are unrealistic."
   ].join("\n");
 };
 
@@ -353,10 +354,19 @@ const generateAndStore = async (key: string, selection: BouquetSelection, previe
   // With Gemini set up, only an image that passes the check is cached; after the last failed try the customizer
   // shows the stock photo. An image no model could check is shown once but not cached, so a later visit retries.
   const checksImages = isGeminiConfigured();
+  // Generator errors and timeouts are retried too, until the tries or the time budget run out.
+  const { maxAttempts, timeBudgetMs } = config.imageGeneration;
+  const startedAt = Date.now();
   let image: InlineImage | null = null;
   let isVerified = !checksImages;
-  for (let attempt = 1; attempt <= config.imageGeneration.maxAttempts && !image; attempt += 1) {
-    const candidate = await generateImage(prompt, reference ? [reference] : []);
+  for (let attempt = 1; attempt <= maxAttempts && !image && Date.now() - startedAt < timeBudgetMs; attempt += 1) {
+    let candidate: InlineImage;
+    try {
+      candidate = await generateImage(prompt, reference ? [reference] : []);
+    } catch {
+      // The provider has already logged why.
+      continue;
+    }
     const problems = checksImages ? await findPreviewProblems(candidate, selection) : [];
     if (problems === "unchecked") {
       image = candidate;

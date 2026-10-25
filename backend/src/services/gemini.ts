@@ -86,6 +86,9 @@ export const inspectImage = async (prompt: string, image: InlineImage, responseS
     return null;
   }
   for (const model of new Set([checkModel, checkFallbackModel])) {
+    if ((unavailableUntil.get(model) ?? 0) > Date.now()) {
+      continue;
+    }
     const result = await inspectImageWith(model, prompt, image, responseSchema);
     if (result !== null) {
       return result;
@@ -93,6 +96,11 @@ export const inspectImage = async (prompt: string, image: InlineImage, responseS
   }
   return null;
 };
+
+// Models known to be out of quota or overloaded are skipped for a while instead of being waited on every time.
+const unavailableUntil = new Map<string, number>();
+const QUOTA_COOLDOWN_MS = 60 * 60 * 1000;
+const BUSY_COOLDOWN_MS = 2 * 60 * 1000;
 
 const inspectImageWith = async (model: string, prompt: string, image: InlineImage, responseSchema: object) => {
   try {
@@ -118,11 +126,15 @@ const inspectImageWith = async (model: string, prompt: string, image: InlineImag
     const text = result.candidates?.[0]?.content?.parts?.find((entry) => entry.text)?.text;
     if (!response.ok || !text) {
       console.error(`Gemini image check with ${model} failed (${response.status}):`, result.error?.message ?? "no answer returned");
+      if (response.status === 429 || response.status >= 500) {
+        unavailableUntil.set(model, Date.now() + (response.status === 429 ? QUOTA_COOLDOWN_MS : BUSY_COOLDOWN_MS));
+      }
       return null;
     }
     return JSON.parse(text) as unknown;
   } catch (error) {
     console.error(`Gemini image check with ${model} failed:`, error);
+    unavailableUntil.set(model, Date.now() + BUSY_COOLDOWN_MS);
     return null;
   }
 };

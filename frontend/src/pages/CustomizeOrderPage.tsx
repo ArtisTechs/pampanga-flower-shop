@@ -515,7 +515,10 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
             <div className="custom-preview-card">
               <div className={`custom-preview-image-wrap ${isPreviewLoading ? "is-loading" : ""}`} aria-busy={isPreviewLoading}>
                 {isPreviewLoading ? (
-                  <LoadingBloom label="Arranging your bouquet preview…" />
+                  <LoadingBloom
+                    label="Arranging your bouquet preview…"
+                    hint="This can sometimes take a few minutes while we make sure every flower is right. Please wait."
+                  />
                 ) : (
                   <img src={previewImage} alt="Preview of your customized bouquet" />
                 )}

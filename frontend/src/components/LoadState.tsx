@@ -8,10 +8,12 @@ interface LoadStateProps {
 
 interface LoadingBloomProps {
   label?: string;
+  /** A smaller second line, e.g. to say a wait may be long. */
+  hint?: string;
 }
 
 // Animated flower used wherever the shop is waiting on data.
-export const LoadingBloom = ({ label = "Gathering fresh blooms…" }: LoadingBloomProps) => (
+export const LoadingBloom = ({ label = "Gathering fresh blooms…", hint }: LoadingBloomProps) => (
   <div className="loading-bloom" role="status">
     <span className="loading-bloom-flower" aria-hidden="true">
       {Array.from({ length: 6 }, (_, index) => (
@@ -20,6 +22,7 @@ export const LoadingBloom = ({ label = "Gathering fresh blooms…" }: LoadingBlo
       <span className="loading-bloom-center" />
     </span>
     <p>{label}</p>
+    {hint ? <small className="loading-bloom-hint">{hint}</small> : null}
   </div>
 );
 

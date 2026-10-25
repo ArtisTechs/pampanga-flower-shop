@@ -1048,6 +1048,7 @@ a.profile-menu-item { display: block; text-decoration: none; }
 .load-state-retry:focus-visible { outline: 3px solid #ffb3d4; outline-offset: 3px; }
 .loading-bloom { display: grid; justify-items: center; gap: 14px; }
 .loading-bloom p { margin: 0; color: #6b4b50; font-family: "Baskervville", serif; font-size: 1.15rem; font-style: italic; }
+.loading-bloom-hint { max-width: 300px; margin-top: -6px; color: #8a6a6e; font-size: 0.78rem; font-weight: 600; line-height: 1.4; }
 .loading-bloom-flower { position: relative; width: 56px; height: 56px; animation: loading-bloom-turn 6s linear infinite; }
 .loading-bloom-petal {
   position: absolute;

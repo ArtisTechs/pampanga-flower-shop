@@ -31,8 +31,10 @@ export const config = {
     // New images one customer may trigger per hour; cached selections don't count.
     generationsPerHour: Number(process.env.IMAGE_GENERATIONS_PER_HOUR ?? 20),
     // With GEMINI_API_KEY set, each new image is checked against the selection (flower counts, colors, wrap)
-    // and regenerated if it doesn't match, up to this many tries in total.
-    maxAttempts: Math.min(5, Math.max(1, Number(process.env.PREVIEW_MAX_ATTEMPTS ?? 3)))
+    // and regenerated if it doesn't match, up to this many tries in total or until the time budget runs out
+    // (each try uses part of the image provider's daily allowance).
+    maxAttempts: Math.min(10, Math.max(1, Number(process.env.PREVIEW_MAX_ATTEMPTS ?? 6))),
+    timeBudgetMs: Math.max(30, Number(process.env.PREVIEW_TIME_BUDGET_SECONDS ?? 240)) * 1000
   },
   cloudflareAi: {
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
@@ -45,10 +47,11 @@ export const config = {
   gemini: {
     apiKey: process.env.GEMINI_API_KEY ?? "",
     imageModel: process.env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
-    // Checks generated bouquet previews (free tier). The "latest" alias survives Google retiring older versions.
-    checkModel: process.env.GEMINI_CHECK_MODEL ?? "gemini-flash-latest",
-    // Used when the check model is busy or rate-limited.
-    checkFallbackModel: process.env.GEMINI_CHECK_FALLBACK_MODEL ?? "gemini-flash-lite-latest"
+    // Checks generated bouquet previews (free tier). "latest" aliases survive Google retiring older versions;
+    // Flash-Lite is fast with a large free daily quota, while Flash's is only about 20 requests a day.
+    checkModel: process.env.GEMINI_CHECK_MODEL ?? "gemini-flash-lite-latest",
+    // Used when the check model is busy or out of quota.
+    checkFallbackModel: process.env.GEMINI_CHECK_FALLBACK_MODEL ?? "gemini-flash-latest"
   },
   // Optional: OTP emails go through Brevo. Without a key, development logs codes to the console
   // and production answers 503.
