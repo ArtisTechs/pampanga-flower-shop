@@ -7,7 +7,9 @@ const required = (name: string): string => {
 };
 
 export const config = {
-  nodeEnv: process.env.NODE_ENV ?? "development",
+  // Unset counts as production so a host that doesn't set NODE_ENV (e.g. Render) never takes development shortcuts,
+  // like printing OTP codes to the log instead of emailing them. Docker Compose sets "development" locally.
+  nodeEnv: process.env.NODE_ENV ?? "production",
   port: Number(process.env.PORT ?? 4000),
   // Apply pending migrations when the server starts; set AUTO_MIGRATE=false to only run them by hand.
   autoMigrate: process.env.AUTO_MIGRATE !== "false",
