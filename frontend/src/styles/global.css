@@ -303,6 +303,14 @@ section { scroll-margin-top: 82px; }
 .field-hint { margin: 0.35rem 0 0; padding: 0 1.2rem; font-size: 0.82rem; line-height: 1.35; }
 .field-error { color: #b42323; font-weight: 600; }
 .field-hint { color: #6f6466; }
+/* Live password feedback: rules tick green as they're met; the confirm note says whether both match. */
+.password-rules { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 0.25rem 0.9rem; }
+.password-rules li { display: inline-flex; align-items: center; gap: 0.3rem; color: #8a7d80; transition: color 0.2s ease; }
+.password-rules li span[aria-hidden="true"] { width: 1em; text-align: center; font-weight: 800; }
+.password-rules li.is-met { color: #1f7a4d; font-weight: 600; }
+.password-match { font-weight: 600; }
+.password-match.is-met { color: #1f7a4d; }
+.password-match.is-unmet { color: #b4532a; }
 .form-error { margin-top: 0.75rem; text-align: center; }
 .otp-send-btn { min-width: 122px; min-height: 46px; padding: 0 16px; font-size: 0.85rem; white-space: nowrap; }
 .forgot-link {

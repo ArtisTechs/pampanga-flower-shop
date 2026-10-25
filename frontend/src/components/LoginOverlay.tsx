@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState, type InputHTMLAttributes, type ReactNod
 import { NavLink } from "react-router";
 import { ApiError, errorMessage } from "../api/client";
 import { requestOtp } from "../api/shop";
+import { PasswordMatch, PasswordRules } from "./PasswordFeedback";
 import { PasswordInput } from "./PasswordInput";
 import type { OtpPurpose, RegisterInput, ResetPasswordInput } from "../types/shop";
 import {
@@ -39,7 +40,7 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 interface LoginFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   name: FieldName;
   error?: string;
-  hint?: string;
+  hint?: ReactNode;
   action?: ReactNode;
 }
 
@@ -64,7 +65,7 @@ const LoginField = ({ name, error, hint, action, ...inputProps }: LoginFieldProp
       {error ? (
         <p id={messageId} className="field-error" role="alert">{error}</p>
       ) : hint ? (
-        <p id={messageId} className="field-hint">{hint}</p>
+        <div id={messageId} className="field-hint">{hint}</div>
       ) : null}
     </div>
   );
@@ -259,7 +260,7 @@ export const LoginOverlay = ({ shopName, onLogin, onRegister, onResetPassword, o
         onChange={(event) => updateField("password", setPassword)(event.target.value)}
         placeholder={authMode === "reset" ? "New Password" : "Password"}
         error={errors.password}
-        hint="At least 8 characters, with a letter and a number."
+        hint={<PasswordRules password={password} />}
       />
       <LoginField
         name="confirmPassword"
@@ -269,6 +270,7 @@ export const LoginOverlay = ({ shopName, onLogin, onRegister, onResetPassword, o
         onChange={(event) => updateField("confirmPassword", setConfirmPassword)(event.target.value)}
         placeholder="Confirm Password"
         error={errors.confirmPassword}
+        hint={confirmPassword ? <PasswordMatch password={password} confirmation={confirmPassword} /> : undefined}
       />
     </>
   );

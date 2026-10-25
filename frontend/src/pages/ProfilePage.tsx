@@ -1,8 +1,9 @@
-import { useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ApiError, errorMessage } from "../api/client";
 import { changePassword, removeAvatar, updateProfile, uploadAvatar } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
+import { PasswordMatch, PasswordRules } from "../components/PasswordFeedback";
 import { PasswordInput } from "../components/PasswordInput";
 import type { Account } from "../types/shop";
 import { resolveImagePath } from "../utils/assets";
@@ -31,7 +32,7 @@ interface ProfileFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   id: string;
   label: string;
   error?: string;
-  hint?: string;
+  hint?: ReactNode;
 }
 
 const ProfileField = ({ id, label, error, hint, ...inputProps }: ProfileFieldProps) => {
@@ -58,7 +59,7 @@ const ProfileField = ({ id, label, error, hint, ...inputProps }: ProfileFieldPro
       {error ? (
         <p id={messageId} className="field-error" role="alert">{error}</p>
       ) : hint ? (
-        <p id={messageId} className="field-hint">{hint}</p>
+        <div id={messageId} className="field-hint">{hint}</div>
       ) : null}
     </div>
   );
@@ -289,9 +290,12 @@ const PasswordSection = ({ onToast }: Pick<ProfilePageProps, "onToast">) => {
           type="password"
           autoComplete="new-password"
           value={newPassword}
-          onChange={(event) => setNewPassword(event.target.value)}
+          onChange={(event) => {
+            setNewPassword(event.target.value);
+            setErrors((current) => ({ ...current, newPassword: undefined, form: undefined }));
+          }}
           error={errors.newPassword}
-          hint="At least 8 characters, with a letter and a number."
+          hint={<PasswordRules password={newPassword} />}
         />
         <ProfileField
           id="profile-confirm-password"
@@ -299,8 +303,12 @@ const PasswordSection = ({ onToast }: Pick<ProfilePageProps, "onToast">) => {
           type="password"
           autoComplete="new-password"
           value={confirmPassword}
-          onChange={(event) => setConfirmPassword(event.target.value)}
+          onChange={(event) => {
+            setConfirmPassword(event.target.value);
+            setErrors((current) => ({ ...current, confirmPassword: undefined, form: undefined }));
+          }}
           error={errors.confirmPassword}
+          hint={confirmPassword ? <PasswordMatch password={newPassword} confirmation={confirmPassword} /> : undefined}
         />
         <div className="profile-actions">
           <button type="submit" className="proceed-button" disabled={isSaving}>

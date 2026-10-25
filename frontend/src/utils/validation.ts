@@ -9,6 +9,13 @@ export const validateEmail = (value: string) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? undefined : "Enter a valid email address";
 };
 
+// Shown as a live checklist while a new password is typed; validateNewPassword enforces the same rules.
+export const PASSWORD_RULES: Array<{ label: string; test: (value: string) => boolean }> = [
+  { label: "8 or more characters", test: (value) => value.length >= 8 && value.length <= 200 },
+  { label: "A letter", test: (value) => /[a-z]/i.test(value) },
+  { label: "A number", test: (value) => /\d/.test(value) }
+];
+
 // For passwords being set (sign-up, reset).
 export const validateNewPassword = (value: string) => {
   if (!value) {
