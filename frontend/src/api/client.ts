@@ -80,6 +80,10 @@ export const apiRequest = async <T>(
   if (data === null) {
     throw new ApiError(503, "The shop server isn't available right now. Please try again later.");
   }
+  // Server faults carry no message meant for customers.
+  if (response.status >= 500) {
+    throw new ApiError(response.status, "The shop server is having trouble right now. Please try again in a moment.");
+  }
   if (!response.ok) {
     const message = typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
       ? data.error

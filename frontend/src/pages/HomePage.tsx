@@ -14,9 +14,11 @@ interface HomePageProps {
   isLoggedIn: boolean;
   onRequireLogin: () => boolean;
   siteContent: SiteContent | null;
+  siteContentError: string | null;
+  onRetrySiteContent: () => void;
 }
 
-export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePageProps) => {
+export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent, siteContentError, onRetrySiteContent }: HomePageProps) => {
   const navigate = useNavigate();
   const home = useApiData(fetchHome, []);
   const bestSellers = useApiData(() => fetchProducts({ collection: "best-sellers" }), []);
@@ -62,13 +64,39 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePagePr
     navigate("/customize");
   };
 
+  const backdrop = (
+    <div
+      className="home-backdrop"
+      style={{ "--home-backdrop-image": `url("${siteImage("home-florals.svg")}")` } as CSSProperties}
+      aria-hidden="true"
+    />
+  );
+
+  // The page is all API content; until both parts arrive, show one loading or error state instead of empty sections.
+  if (!siteContent || !home.data) {
+    const retry = () => {
+      if (!siteContent) {
+        onRetrySiteContent();
+      }
+      if (!home.data) {
+        home.reload();
+      }
+    };
+    return (
+      <div className="home-page">
+        {backdrop}
+        <LoadState
+          error={siteContent ? home.error : siteContentError ?? home.error}
+          onRetry={retry}
+          className="home-load-state"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="home-page">
-      <div
-        className="home-backdrop"
-        style={{ "--home-backdrop-image": `url("${siteImage("home-florals.svg")}")` } as CSSProperties}
-        aria-hidden="true"
-      />
+      {backdrop}
       <FallingPetals />
       <section id="home" className="hero">
         <div className="hero-container">
@@ -118,7 +146,6 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent }: HomePagePr
           <h2><EmphasisText text={text("occasionsHeading")} /></h2>
         </div>
         <div className="grid occasion-grid">
-          {!home.data ? <LoadState error={home.error} onRetry={home.reload} /> : null}
           {occasionCards.map((card, index) => (
             <Link
               to={card.route}

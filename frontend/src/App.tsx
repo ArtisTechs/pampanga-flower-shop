@@ -30,7 +30,8 @@ import { ProductListingPage } from "./pages/ProductListingPage";
 
 function App() {
   const { currentAccount, isAuthLoading, isLoggedIn, login, register, resetPassword, logout, updateAccount } = useAuth();
-  const { data: siteContent } = useApiData(fetchSiteContent, []);
+  const siteContentState = useApiData(fetchSiteContent, []);
+  const siteContent = siteContentState.data;
   const location = useLocation();
   const navigate = useNavigate();
   const showShadow = useRevealOnScroll();
@@ -199,7 +200,18 @@ function App() {
       />
       <main className="main-content">
         <Routes>
-          <Route path="/" element={<HomePage onRequireLogin={handleRequireLogin} isLoggedIn={isCustomerLoggedIn} siteContent={siteContent} />} />
+          <Route
+            path="/"
+            element={
+              <HomePage
+                onRequireLogin={handleRequireLogin}
+                isLoggedIn={isCustomerLoggedIn}
+                siteContent={siteContent}
+                siteContentError={siteContentState.error}
+                onRetrySiteContent={siteContentState.reload}
+              />
+            }
+          />
           <Route
             path="/login"
             element={

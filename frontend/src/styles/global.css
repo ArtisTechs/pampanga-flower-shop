@@ -1003,6 +1003,7 @@ a.profile-menu-item { display: block; text-decoration: none; }
   font: inherit;
   padding: 2px 6px;
 }
+.home-load-state { width: min(640px, calc(100% - 32px)); min-height: 320px; margin: clamp(48px, 12vh, 120px) auto; }
 .load-state-retry {
   justify-self: center;
   cursor: pointer;
