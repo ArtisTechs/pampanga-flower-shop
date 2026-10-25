@@ -83,7 +83,7 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent, siteContentE
       }
     };
     return (
-      <div className="home-page">
+      <div className="home-page home-page-loading">
         {backdrop}
         <LoadState
           error={siteContent ? home.error : siteContentError ?? home.error}

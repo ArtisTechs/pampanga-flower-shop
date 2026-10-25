@@ -1003,7 +1003,9 @@ a.profile-menu-item { display: block; text-decoration: none; }
   font: inherit;
   padding: 2px 6px;
 }
-.home-load-state { width: min(560px, calc(100% - 32px)); min-height: 320px; margin: clamp(48px, 12vh, 120px) auto; }
+/* Fill the viewport while loading so the vine backdrop shows whole instead of a cropped strip. */
+.home-page-loading { min-height: calc(100svh - 82px); display: grid; place-items: center; padding: 32px 0; }
+.home-load-state { width: min(560px, calc(100% - 32px)); min-height: 320px; }
 /* Loading / error placeholder: a blooming flower while waiting, a soft card when something failed. */
 .load-state { grid-column: 1 / -1; min-height: 220px; display: grid; place-items: center; padding: 32px 20px; text-align: center; }
 .load-state-error {
