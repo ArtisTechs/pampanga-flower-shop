@@ -9,6 +9,8 @@ const required = (name: string): string => {
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT ?? 4000),
+  // Apply pending migrations when the server starts; set AUTO_MIGRATE=false to only run them by hand.
+  autoMigrate: process.env.AUTO_MIGRATE !== "false",
   corsOrigins: (process.env.CORS_ORIGIN ?? "http://localhost:5173")
     .split(",")
     .map((origin) => origin.trim())
