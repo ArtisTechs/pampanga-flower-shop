@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { errorMessage } from "../api/client";
-import { fetchMyOrder, fetchMyOrders, uploadPaymentProof } from "../api/shop";
+import { cancelMyOrder, fetchMyOrder, fetchMyOrders, uploadPaymentProof } from "../api/shop";
 import { CustomBouquetDetails, orderItemBouquetSummary } from "../components/CustomBouquetDetails";
 import { LoadState } from "../components/LoadState";
 import { PaymentAccountCard } from "../components/PaymentMethodPicker";
@@ -21,8 +21,7 @@ const TRACK_STEPS: Array<{ status: AdminOrderStatus; label: string; message: str
 // While the payment isn't verified, the order waits on that instead of the bouquet.
 const PAYMENT_MESSAGES: Partial<Record<PaymentStatus, string>> = {
   "Awaiting payment": "Send your payment and upload the screenshot so we can start on your bouquet.",
-  "For verification": "We received your payment screenshot and are verifying it.",
-  Rejected: "We couldn't verify your payment. Please check the reason below and upload a new screenshot."
+  "For verification": "We received your payment screenshot and are verifying it."
 };
 
 const shortOrderId = (id: string) => `#${id.slice(0, 8).toUpperCase()}`;
@@ -94,9 +93,6 @@ const PaymentProofForm = ({ order, onUpdated }: { order: CustomerOrder; onUpdate
 
   return (
     <div className="my-order-payment">
-      {order.paymentStatus === "Rejected" && order.paymentNote ? (
-        <p className="my-order-payment-note"><strong>Reason:</strong> {order.paymentNote}</p>
-      ) : null}
       {order.payment ? (
         <>
           <p className="my-order-payment-label">Pay {formatPhpCurrency(order.totalPhp)} to</p>
@@ -112,11 +108,53 @@ const PaymentProofForm = ({ order, onUpdated }: { order: CustomerOrder; onUpdate
   );
 };
 
+// Pending orders can be cancelled by the customer; the flowers go back into the shop's stock.
+const CancelOrderButton = ({ order, onUpdated }: { order: CustomerOrder; onUpdated: (order: CustomerOrder) => void }) => {
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCancel = async () => {
+    setIsCancelling(true);
+    setError(null);
+    try {
+      onUpdated(await cancelMyOrder(order.id));
+    } catch (cancelError) {
+      setError(errorMessage(cancelError));
+      setIsCancelling(false);
+    }
+  };
+
+  return (
+    <div className="my-order-cancel">
+      {isConfirming ? (
+        <>
+          <p>Cancel this order? This can't be undone.</p>
+          <div className="my-order-cancel-actions">
+            <button type="button" className="my-order-toggle" onClick={() => setIsConfirming(false)} disabled={isCancelling}>
+              Keep order
+            </button>
+            <button type="button" className="my-order-cancel-button" onClick={handleCancel} disabled={isCancelling}>
+              {isCancelling ? "Cancelling..." : "Yes, cancel order"}
+            </button>
+          </div>
+        </>
+      ) : (
+        <button type="button" className="my-order-cancel-button" onClick={() => setIsConfirming(true)}>
+          Cancel order
+        </button>
+      )}
+      {error ? <p className="payment-proof-error" role="alert">{error}</p> : null}
+    </div>
+  );
+};
+
 const OrderCard = ({ order, onUpdated }: { order: CustomerOrder; onUpdated: (order: CustomerOrder) => void }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const isCancelled = order.status === "Cancelled";
   const step = TRACK_STEPS.find((entry) => entry.status === order.status);
-  const message = PAYMENT_MESSAGES[order.paymentStatus] ?? step?.message;
-  const needsProof = order.paymentStatus === "Awaiting payment" || order.paymentStatus === "Rejected";
+  const message = isCancelled ? null : PAYMENT_MESSAGES[order.paymentStatus] ?? step?.message;
+  const needsProof = !isCancelled && order.paymentStatus === "Awaiting payment";
   const detailsId = `order-details-${order.id}`;
 
   return (
@@ -132,8 +170,14 @@ const OrderCard = ({ order, onUpdated }: { order: CustomerOrder; onUpdated: (ord
         </div>
       </header>
 
-      <OrderTracker status={order.status} />
-      {message ? <p className="my-order-message">{message}</p> : null}
+      {isCancelled ? (
+        <p className="my-order-message my-order-cancelled">{order.cancelReason ?? "This order was cancelled."}</p>
+      ) : (
+        <>
+          <OrderTracker status={order.status} />
+          {message ? <p className="my-order-message">{message}</p> : null}
+        </>
+      )}
       {needsProof ? <PaymentProofForm order={order} onUpdated={onUpdated} /> : null}
 
       <dl className="my-order-facts">
@@ -160,6 +204,7 @@ const OrderCard = ({ order, onUpdated }: { order: CustomerOrder; onUpdated: (ord
       >
         {isExpanded ? "Hide details" : "View details"}
       </button>
+      {order.status === "Pending" ? <CancelOrderButton order={order} onUpdated={onUpdated} /> : null}
       {isExpanded ? (
         <div id={detailsId}>
           <OrderDetails orderId={order.id} />

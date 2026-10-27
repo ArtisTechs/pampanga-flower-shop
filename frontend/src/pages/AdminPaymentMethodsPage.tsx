@@ -305,7 +305,7 @@ const PaymentMethodFormDialog = ({ method, onClose, onSaved, onToast }: PaymentM
               <span className="admin-product-dropzone-empty">
                 <Icon name="upload" />
                 <strong>Upload QR code</strong>
-                <small>JPG, PNG or WebP · up to 2 MB</small>
+                <small>JPG, PNG or WebP · up to 3 MB</small>
               </span>
             )}
           </label>

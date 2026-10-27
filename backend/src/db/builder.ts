@@ -6,6 +6,8 @@ import { pool } from "./pool.js";
 
 export const BUILDER_GROUPS = ["size", "flower", "filler", "palette", "wrap", "ribbon"] as const;
 export type BuilderGroup = (typeof BUILDER_GROUPS)[number];
+/** Groups whose options use up stock: each one is linked to an inventory row. */
+export const STOCKED_GROUPS: readonly BuilderGroup[] = ["flower", "filler"];
 
 interface BuilderOptionRow extends RowDataPacket {
   id: string;
@@ -15,8 +17,20 @@ interface BuilderOptionRow extends RowDataPacket {
   description: string;
   price_php: number;
   colors: string[] | null;
+  color_choices: FlowerColor[] | null;
+  image_url: string | null;
   is_available: number;
   is_default: number;
+  inventory_item_id: string | null;
+  stock: number | null;
+  stock_unit: string | null;
+}
+
+/** A color a flower can be ordered in; every flower has exactly one default. */
+export interface FlowerColor {
+  name: string;
+  hex: string;
+  isDefault: boolean;
 }
 
 interface GeneratedPreviewRow extends RowDataPacket {
@@ -43,16 +57,24 @@ export interface BuilderOption {
   description: string;
   pricePhp: number;
   colors: string[];
+  colorChoices: FlowerColor[];
+  imageUrl: string | null;
   available: boolean;
   isDefault: boolean;
+  /** Linked inventory row (flowers and fillers); null means the option isn't stock-limited. */
+  inventoryItemId: string | null;
+  stock: number | null;
+  stockUnit: string | null;
 }
 
 export const loadBuilderOptions = async (availableOnly: boolean): Promise<BuilderOption[]> => {
   const [rows] = await pool.query<BuilderOptionRow[]>(
-    `SELECT id, option_group, code, name, description, price_php, colors, is_available, is_default
-     FROM builder_options
-     ${availableOnly ? "WHERE is_available = TRUE" : ""}
-     ORDER BY FIELD(option_group, 'size', 'flower', 'filler', 'palette', 'wrap', 'ribbon'), sort_order`
+    `SELECT b.id, b.option_group, b.code, b.name, b.description, b.price_php, b.colors, b.color_choices, b.image_url,
+            b.is_available, b.is_default, i.id AS inventory_item_id, i.current_stock AS stock, i.unit AS stock_unit
+     FROM builder_options b
+     LEFT JOIN inventory_items i ON i.builder_option_id = b.id
+     ${availableOnly ? "WHERE b.is_available = TRUE" : ""}
+     ORDER BY FIELD(b.option_group, 'size', 'flower', 'filler', 'palette', 'wrap', 'ribbon'), b.sort_order`
   );
   return rows.map((row) => ({
     id: row.id,
@@ -62,8 +84,13 @@ export const loadBuilderOptions = async (availableOnly: boolean): Promise<Builde
     description: row.description,
     pricePhp: row.price_php,
     colors: row.colors ?? [],
+    colorChoices: row.color_choices ?? [],
+    imageUrl: row.image_url,
     available: Boolean(row.is_available),
-    isDefault: Boolean(row.is_default)
+    isDefault: Boolean(row.is_default),
+    inventoryItemId: row.inventory_item_id,
+    stock: row.stock,
+    stockUnit: row.stock_unit
   }));
 };
 
@@ -93,9 +120,15 @@ export interface BouquetSelection {
   palette: BuilderOption;
   wrap: BuilderOption;
   ribbon: BuilderOption;
-  flowers: Array<{ option: BuilderOption; quantity: number }>;
+  flowers: Array<{ option: BuilderOption; color: FlowerColor; quantity: number }>;
   fillers: BuilderOption[];
 }
+
+// A flower's default color; flowers saved before colors existed fall back to their swatch.
+export const defaultFlowerColor = (flower: BuilderOption): FlowerColor =>
+  flower.colorChoices.find((color) => color.isDefault)
+    ?? flower.colorChoices[0]
+    ?? { name: "Natural", hex: flower.colors[0] ?? "#f2b8c6", isDefault: true };
 
 // Validates a customer's builder choices against the available options (shared by previews and orders).
 export const parseBouquetSelection = (
@@ -119,16 +152,26 @@ export const parseBouquetSelection = (
   if (!Array.isArray(custom.flowers) || custom.flowers.length === 0) {
     throw new HttpError(400, "Choose at least one flower");
   }
-  const flowerCounts = new Map<string, number>();
+  // Keyed by flower and color, so the same flower may appear in more than one color.
+  const flowerCounts = new Map<string, { option: BuilderOption; color: FlowerColor; quantity: number }>();
   for (const entry of custom.flowers) {
     if (!isRecord(entry)) {
       throw new HttpError(400, "Invalid flower selection");
     }
     const flower = pick("flower", entry.code, "Flower");
     const count = requireInt(entry.quantity, "Flower quantity", 1, maxFlowers);
-    flowerCounts.set(flower.code, (flowerCounts.get(flower.code) ?? 0) + count);
+    // Carts saved before flower colors existed don't send one; they get the default.
+    const color = entry.color === undefined
+      ? defaultFlowerColor(flower)
+      : flower.colorChoices.find((choice) => choice.name === entry.color);
+    if (!color) {
+      throw new HttpError(400, `${flower.name} isn't available in that color`);
+    }
+    const key = `${flower.code}|${color.name}`;
+    const existing = flowerCounts.get(key);
+    flowerCounts.set(key, { option: flower, color, quantity: (existing?.quantity ?? 0) + count });
   }
-  const totalFlowers = [...flowerCounts.values()].reduce((total, count) => total + count, 0);
+  const totalFlowers = [...flowerCounts.values()].reduce((total, flower) => total + flower.quantity, 0);
   if (totalFlowers > maxFlowers) {
     throw new HttpError(400, `A bouquet can have at most ${maxFlowers} flowers`);
   }
@@ -145,10 +188,7 @@ export const parseBouquetSelection = (
     palette,
     wrap,
     ribbon,
-    flowers: [...flowerCounts].map(([code, quantity]) => ({
-      option: options.find((entry) => entry.group === "flower" && entry.code === code)!,
-      quantity
-    })),
+    flowers: [...flowerCounts.values()],
     fillers
   };
 };
@@ -158,7 +198,7 @@ export const parseBouquetSelection = (
 export const selectionKey = (selection: BouquetSelection) => {
   const canonical = {
     flowers: selection.flowers
-      .map(({ option, quantity }) => `${option.code}:${quantity}`)
+      .map(({ option, color, quantity }) => `${option.code}:${color.name.toLowerCase()}:${quantity}`)
       .sort(),
     fillers: selection.fillers.map((filler) => filler.code).sort(),
     palette: selection.palette.code,
@@ -169,7 +209,8 @@ export const selectionKey = (selection: BouquetSelection) => {
 };
 
 export interface GeneratedPreviewSelection {
-  flowers: Array<{ name: string; quantity: number }>;
+  // color is missing on previews generated before flower colors existed.
+  flowers: Array<{ name: string; quantity: number; color?: string }>;
   fillers: string[];
   palette: string;
   wrap: string;
@@ -177,7 +218,7 @@ export interface GeneratedPreviewSelection {
 }
 
 export const describeSelection = (selection: BouquetSelection): GeneratedPreviewSelection => ({
-  flowers: selection.flowers.map(({ option, quantity }) => ({ name: option.name, quantity })),
+  flowers: selection.flowers.map(({ option, color, quantity }) => ({ name: option.name, quantity, color: color.name })),
   fillers: selection.fillers.map((filler) => filler.name),
   palette: selection.palette.name,
   wrap: selection.wrap.name,

@@ -2,6 +2,7 @@ import { useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEve
 import { Link } from "react-router";
 import type { ProductItem } from "../types/shop";
 import { formatPhpCurrency } from "../utils/currency";
+import { isSoldOut, stockLabel } from "../utils/stock";
 
 interface FeaturedCarouselProps {
   products: ProductItem[];
@@ -117,6 +118,9 @@ export const FeaturedCarousel = ({ products, route, label, intervalMs = 5200 }: 
                 <span className="featured-badge">Best Seller</span>
                 <h3>{product.name}</h3>
                 <p className="featured-price">{formatPhpCurrency(product.pricePhp)}</p>
+                {stockLabel(product.stock, "bouquets") ? (
+                  <p className={`stock-note ${isSoldOut(product.stock) ? "sold-out" : ""}`}>{stockLabel(product.stock, "bouquets")}</p>
+                ) : null}
               </div>
             </Link>
           );

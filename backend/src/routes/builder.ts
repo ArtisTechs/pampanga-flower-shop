@@ -11,12 +11,17 @@ import { currentUser, requireAuth } from "../middleware/auth.js";
 import { getOrCreatePreview } from "../services/bouquetPreview.js";
 import { bodyOf } from "../utils/validate.js";
 
-const toClientOption = ({ code, name, description, pricePhp, colors }: BuilderOption) => ({
+// stock: units left for flowers and fillers (null = not stock-limited); stockUnit e.g. "stems".
+const toClientOption = ({ code, name, description, pricePhp, colors, colorChoices, imageUrl, stock, stockUnit }: BuilderOption) => ({
   id: code,
   name,
   description,
   pricePhp,
-  colors
+  colors,
+  colorChoices,
+  imageUrl,
+  stock,
+  stockUnit
 });
 
 export const builderRouter = Router();

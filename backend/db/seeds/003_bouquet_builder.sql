@@ -32,6 +32,18 @@ INSERT IGNORE INTO builder_options (id, option_group, code, name, description, p
   ('ribbon-velvet', 'ribbon', 'velvet', 'Velvet Ribbon', 'Plush velvet ribbon for a rich, premium finish.', 0, NULL, 2),
   ('ribbon-twine', 'ribbon', 'twine', 'Twine', 'Natural twine tie for rustic, countryside-inspired bouquets.', 0, NULL, 3);
 
+-- Colors each flower can be ordered in (also in migration 009). Only fills flowers that have none yet.
+UPDATE builder_options SET color_choices = '[{"name": "Red", "hex": "#c91f1f", "isDefault": true}, {"name": "Pink", "hex": "#f39bb0", "isDefault": false}, {"name": "White", "hex": "#f5f1e6", "isDefault": false}, {"name": "Peach", "hex": "#f7b58f", "isDefault": false}, {"name": "Yellow", "hex": "#f3d34a", "isDefault": false}, {"name": "Lavender", "hex": "#b9a2d8", "isDefault": false}]'
+WHERE id = 'flower-roses' AND color_choices IS NULL;
+UPDATE builder_options SET color_choices = '[{"name": "Pink", "hex": "#f27a9b", "isDefault": true}, {"name": "Red", "hex": "#d02a3a", "isDefault": false}, {"name": "White", "hex": "#f6f3ec", "isDefault": false}, {"name": "Purple", "hex": "#9a5bb8", "isDefault": false}, {"name": "Yellow", "hex": "#f2d14e", "isDefault": false}]'
+WHERE id = 'flower-carnations' AND color_choices IS NULL;
+UPDATE builder_options SET color_choices = '[{"name": "Pink", "hex": "#e0457b", "isDefault": true}, {"name": "White", "hex": "#f7f4ee", "isDefault": false}]'
+WHERE id = 'flower-stargazer-lilies' AND color_choices IS NULL;
+UPDATE builder_options SET color_choices = '[{"name": "Orange", "hex": "#ff7a3d", "isDefault": true}, {"name": "Pink", "hex": "#f27aa0", "isDefault": false}, {"name": "Red", "hex": "#d8323a", "isDefault": false}, {"name": "Yellow", "hex": "#f5cf3a", "isDefault": false}, {"name": "White", "hex": "#f7f3ea", "isDefault": false}]'
+WHERE id = 'flower-gerberas' AND color_choices IS NULL;
+UPDATE builder_options SET color_choices = '[{"name": "Yellow", "hex": "#f3c228", "isDefault": true}]'
+WHERE id = 'flower-sunflowers' AND color_choices IS NULL;
+
 INSERT IGNORE INTO builder_previews (flower_count, image_path, flower_codes, palette_codes, wrap_codes, ribbon_codes, sort_order) VALUES
   (1, 'https://res.cloudinary.com/dwbd9mljg/image/upload/v1792628905/pampanga-flower-shop/catalog/customize-previews/1-flower/single-blush-rose-transparent-wrap-peach-ribbon.webp', '["roses"]', '["blush"]', '["transparent"]', '["satin"]', 1),
   (1, 'https://res.cloudinary.com/dwbd9mljg/image/upload/v1792628904/pampanga-flower-shop/catalog/customize-previews/1-flower/single-ivory-rose-kraft-wrap-twine.webp', '["roses"]', '["ivory"]', '["kraft"]', '["twine"]', 2),

@@ -9,7 +9,12 @@ interface CustomBouquetDetailsProps {
 export const CustomBouquetDetails = ({ summary, className = "" }: CustomBouquetDetailsProps) => {
   const rows: Array<[string, string]> = [
     ["Size", summary.size],
-    ["Flowers", summary.flowers.map((flower) => `${flower.name} × ${flower.quantity}`).join(", ")],
+    [
+      "Flowers",
+      summary.flowers
+        .map((flower) => `${flower.color ? `${flower.color} ` : ""}${flower.name} × ${flower.quantity}`)
+        .join(", ")
+    ],
     ["Fillers", summary.fillers.join(", ")],
     ["Palette", summary.palette],
     ["Wrap", summary.wrap],

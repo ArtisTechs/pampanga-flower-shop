@@ -18,7 +18,7 @@ interface ProfilePageProps {
 type Errors<Field extends string> = Partial<Record<Field | "form", string>>;
 
 const AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
 
 // Puts an API error under the input it names (when it's one of fields), otherwise under the form.
 const apiErrors = <Field extends string>(error: unknown, fields: readonly Field[]): Errors<Field> => {
@@ -81,7 +81,7 @@ const AvatarSection = ({ account, onAccountUpdated, onToast }: ProfilePageProps)
       return;
     }
     if (file.size > MAX_AVATAR_BYTES) {
-      setError("The photo must be 2 MB or smaller");
+      setError("The photo must be 3 MB or smaller");
       return;
     }
 
@@ -119,7 +119,7 @@ const AvatarSection = ({ account, onAccountUpdated, onToast }: ProfilePageProps)
       </div>
       <div className="profile-photo-body">
         <h2 id="profile-photo-title">Profile Photo</h2>
-        <p className="field-hint">JPG, PNG, or WebP, up to 2 MB.</p>
+        <p className="field-hint">JPG, PNG, or WebP, up to 3 MB.</p>
         <div className="profile-actions">
           <button type="button" className="proceed-button" onClick={() => fileInputRef.current?.click()} disabled={isBusy}>
             {isBusy ? "Please wait..." : account.avatarUrl ? "Change photo" : "Upload photo"}

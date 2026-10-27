@@ -1,8 +1,9 @@
 import { Link } from "react-router";
 import { CustomBouquetDetails } from "../components/CustomBouquetDetails";
-import { MAX_ITEM_QUANTITY } from "../hooks/useCart";
+import { maxQuantityOf } from "../hooks/useCart";
 import type { CartItem } from "../types/shop";
 import { formatPhpCurrency } from "../utils/currency";
+import { stockLabel } from "../utils/stock";
 
 interface CartPageProps {
   items: CartItem[];
@@ -36,6 +37,7 @@ export const CartPage = ({ items, onRemoveItem, onUpdateQuantity }: CartPageProp
                   <h2>{item.custom?.summary ? `Custom ${item.custom.summary.size} Bouquet` : item.name}</h2>
                   {item.custom?.summary ? <CustomBouquetDetails summary={item.custom.summary} className="cart-item-details" /> : null}
                   <p>{formatPhpCurrency(item.pricePhp)}</p>
+                  {stockLabel(item.stock, "bouquets") ? <p className="stock-note">{stockLabel(item.stock, "bouquets")}</p> : null}
                 </div>
                 <div className="cart-item-quantity">
                   <span>Qty</span>
@@ -52,7 +54,7 @@ export const CartPage = ({ items, onRemoveItem, onUpdateQuantity }: CartPageProp
                     <button
                       type="button"
                       onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                      disabled={item.quantity >= MAX_ITEM_QUANTITY}
+                      disabled={item.quantity >= maxQuantityOf(item)}
                       aria-label={`Increase ${item.name}`}
                     >
                       +

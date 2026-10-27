@@ -10,16 +10,17 @@ import type { Account, AdminProduct, AdminProductInput, ProductCategory } from "
 import { resolveImagePath } from "../utils/assets";
 import { formatPhpCurrency } from "../utils/currency";
 
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_DESCRIPTION = 1000;
 
 type StatusFilter = "All" | "Visible" | "Hidden";
-const toInput = ({ categoryId, name, description, pricePhp, imagePath, bestSeller, active }: AdminProduct): AdminProductInput => ({
+const toInput = ({ categoryId, name, description, pricePhp, stock, imagePath, bestSeller, active }: AdminProduct): AdminProductInput => ({
   categoryId,
   name,
   description,
   pricePhp,
+  stock,
   imagePath,
   bestSeller,
   active
@@ -185,6 +186,9 @@ export const AdminProductsPage = ({ account, onLogout, onToast }: AdminProductsP
                   <p className="admin-product-category">{product.categoryTitle}</p>
                   <h3>{product.name}</h3>
                   <strong>{formatPhpCurrency(product.pricePhp)}</strong>
+                  <span className={`stock-note ${product.stock <= 0 ? "sold-out" : ""}`}>
+                    {product.stock <= 0 ? "Sold out" : `${product.stock} in stock`}
+                  </span>
                 </div>
                 <div className="admin-product-actions">
                   <button type="button" className="edit" onClick={() => setEditing(product)} aria-label={`Edit ${product.name}`}>
@@ -230,12 +234,14 @@ interface ProductFormDialogProps {
   onToast: (message: string, tone: ToastTone) => void;
 }
 
-type FieldErrors = Partial<Record<"image" | "name" | "category" | "price", string>>;
+type FieldErrors = Partial<Record<"image" | "name" | "category" | "price" | "stock", string>>;
+const MAX_STOCK = 100_000;
 
 const ProductFormDialog = ({ product, categories, defaultCategoryId, onClose, onSaved, onToast }: ProductFormDialogProps) => {
   const [name, setName] = useState(product?.name ?? "");
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? defaultCategoryId);
   const [price, setPrice] = useState(product ? String(product.pricePhp) : "");
+  const [stock, setStock] = useState(product ? String(product.stock) : "");
   const [description, setDescription] = useState(product?.description ?? "");
   const [bestSeller, setBestSeller] = useState(product?.bestSeller ?? false);
   const [active, setActive] = useState(product?.active ?? true);
@@ -280,7 +286,7 @@ const ProductFormDialog = ({ product, categories, defaultCategoryId, onClose, on
       return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      setErrors((current) => ({ ...current, image: `This image is ${(file.size / 1024 / 1024).toFixed(1)} MB; the limit is 2 MB.` }));
+      setErrors((current) => ({ ...current, image: `This image is ${(file.size / 1024 / 1024).toFixed(1)} MB; the limit is 3 MB.` }));
       return;
     }
     setErrors((current) => ({ ...current, image: undefined }));
@@ -299,7 +305,10 @@ const ProductFormDialog = ({ product, categories, defaultCategoryId, onClose, on
       image: !imageFile && !product ? "Add a photo of the bouquet." : undefined,
       name: name.trim() ? undefined : "Enter a product name.",
       category: categoryId ? undefined : "Choose a category.",
-      price: price.trim() !== "" && Number.isFinite(pricePhp) && pricePhp > 0 ? undefined : "Enter a price above ₱0."
+      price: price.trim() !== "" && Number.isFinite(pricePhp) && pricePhp > 0 ? undefined : "Enter a price above ₱0.",
+      stock: stock.trim() !== "" && Number.isInteger(Number(stock)) && Number(stock) >= 0 && Number(stock) <= MAX_STOCK
+        ? undefined
+        : "Enter how many bouquets you can sell (0 or more)."
     };
   };
 
@@ -323,6 +332,7 @@ const ProductFormDialog = ({ product, categories, defaultCategoryId, onClose, on
         name: name.trim(),
         description: description.trim(),
         pricePhp: Number(price),
+        stock: Number(stock),
         imagePath,
         bestSeller,
         active
@@ -386,7 +396,7 @@ const ProductFormDialog = ({ product, categories, defaultCategoryId, onClose, on
                   <Icon name="upload" />
                   <strong>Click to upload</strong>
                   or drag and drop
-                  <small>JPG, PNG or WebP · up to 2 MB</small>
+                  <small>JPG, PNG or WebP · up to 3 MB</small>
                 </span>
               )}
             </label>
@@ -441,6 +451,24 @@ const ProductFormDialog = ({ product, categories, defaultCategoryId, onClose, on
                   />
                 </span>
                 {errors.price ? <span className="admin-product-error">{errors.price}</span> : null}
+              </label>
+
+              <label className="admin-product-field">
+                <span className="admin-product-label">Stock <em>*</em></span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  max={MAX_STOCK}
+                  step="1"
+                  value={stock}
+                  onChange={(event) => setStock(event.target.value)}
+                  placeholder="0"
+                  className={errors.stock ? "invalid" : ""}
+                  aria-invalid={Boolean(errors.stock)}
+                />
+                <small className="admin-ui-muted">Bouquets left to sell. Orders take from it; cancelled orders put it back.</small>
+                {errors.stock ? <span className="admin-product-error">{errors.stock}</span> : null}
               </label>
             </div>
 

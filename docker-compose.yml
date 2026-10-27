@@ -35,6 +35,7 @@ services:
       DB_NAME: ${MYSQL_DATABASE}
       DB_USER: ${MYSQL_USER}
       DB_PASSWORD: ${MYSQL_PASSWORD}
+      ORDER_UNPAID_CANCEL_HOURS: ${ORDER_UNPAID_CANCEL_HOURS:-24}
       # Product image uploads (admin panel); leave empty to disable uploads.
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}

@@ -21,7 +21,8 @@ interface InlineImage {
 // Image models follow plain sentences with spelled-out counts and named colors far better than lists or
 // hex codes, so every choice is turned into words. Unknown codes fall back to the option's own name.
 
-// Wrapping paper and ribbon colors that go with each palette.
+// The palette only colors the wrapping paper and ribbon; each flower is the color the customer picked for it.
+// Palettes the admin adds later use their own name for both.
 const PALETTE_PAPER_COLORS: Record<string, string> = {
   red: "white",
   blush: "pale pink",
@@ -40,78 +41,28 @@ const PALETTE_RIBBON_COLORS: Record<string, string> = {
   black: "black"
 };
 
-// Each flower only in colors it is really sold in at Philippine flower shops (e.g. Dangwa). When a flower
-// doesn't come in the palette's color, it keeps its nearest real color and the paper and ribbon carry the palette.
+const paperColorOf = (palette: BuilderOption) => PALETTE_PAPER_COLORS[palette.code] ?? palette.name.toLowerCase();
+const ribbonColorOf = (palette: BuilderOption) => PALETTE_RIBBON_COLORS[palette.code] ?? palette.name.toLowerCase();
+
+// How the shop's flowers are named in the prompt; "{color}" is the customer's pick for that flower. The admin
+// only offers colors each flower is really sold in, so the prompt doesn't second-guess them.
 interface FlowerLook {
   singular: string;
   plural: string;
   detail: string;
-  colors: Record<string, string>;
 }
 
 const FLOWER_LOOKS: Record<string, FlowerLook> = {
-  roses: {
-    singular: "{color} rose",
-    plural: "{color} roses",
-    detail: "",
-    colors: {
-      red: "deep red",
-      blush: "soft blush pink",
-      ivory: "creamy ivory white",
-      purple: "lavender",
-      blue: "dyed royal blue",
-      black: "very dark burgundy, almost black,"
-    }
-  },
-  carnations: {
-    singular: "{color} carnation",
-    plural: "{color} carnations",
-    detail: " with ruffled petals",
-    colors: {
-      red: "red",
-      blush: "light pink",
-      ivory: "white",
-      purple: "purple",
-      blue: "dyed light blue",
-      black: "dark burgundy"
-    }
-  },
-  // Stargazers are naturally deep pink with white edges; white oriental lilies stand in where pink clashes.
+  roses: { singular: "{color} rose", plural: "{color} roses", detail: "" },
+  carnations: { singular: "{color} carnation", plural: "{color} carnations", detail: " with ruffled petals" },
   "stargazer-lilies": {
-    singular: "{color} lily",
-    plural: "{color} lilies",
-    detail: " with large open star-shaped petals",
-    colors: {
-      red: "deep pink stargazer",
-      blush: "pink stargazer",
-      ivory: "pure white oriental",
-      purple: "deep pink stargazer",
-      blue: "pure white oriental",
-      black: "pure white oriental"
-    }
+    singular: "{color} stargazer lily",
+    plural: "{color} stargazer lilies",
+    detail: " with large open star-shaped petals"
   },
-  gerberas: {
-    singular: "{color} gerbera daisy",
-    plural: "{color} gerbera daisies",
-    detail: "",
-    colors: {
-      red: "red",
-      blush: "light pink",
-      ivory: "white",
-      purple: "magenta",
-      blue: "white",
-      black: "deep red"
-    }
-  },
-  // Sunflowers only come in yellow.
-  sunflowers: {
-    singular: "{color} sunflower",
-    plural: "{color} sunflowers",
-    detail: " with dark brown centers",
-    colors: {}
-  }
+  gerberas: { singular: "{color} gerbera daisy", plural: "{color} gerbera daisies", detail: "" },
+  sunflowers: { singular: "{color} sunflower", plural: "{color} sunflowers", detail: " with dark brown centers" }
 };
-const DEFAULT_FLOWER_COLORS: Record<string, string> = { sunflowers: "golden yellow" };
 
 const ASTER_COLORS: Record<string, string> = {
   red: "white",
@@ -147,15 +98,16 @@ const countWord = (count: number) => NUMBER_WORDS[count] ?? String(count);
 const listText = (items: string[]) =>
   items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 
-// "two deep red roses", "one golden yellow sunflower with dark brown centers"
-const flowerPhrase = (selection: BouquetSelection, option: BuilderOption, quantity: number) => {
-  const { palette } = selection;
+type SelectedFlower = BouquetSelection["flowers"][number];
+
+// "two red roses", "one yellow sunflower with dark brown centers"
+const flowerPhrase = ({ option, color }: SelectedFlower, quantity: number) => {
+  const colorWord = color.name.toLowerCase();
   const look = FLOWER_LOOKS[option.code];
   if (!look) {
-    return `${countWord(quantity)} ${palette.name.toLowerCase()} ${option.name.toLowerCase()}`;
+    return `${countWord(quantity)} ${colorWord} ${option.name.toLowerCase()}`;
   }
-  const color = look.colors[palette.code] ?? DEFAULT_FLOWER_COLORS[option.code] ?? palette.name.toLowerCase();
-  return `${countWord(quantity)} ${(quantity === 1 ? look.singular : look.plural).replace("{color}", color)}${look.detail}`;
+  return `${countWord(quantity)} ${(quantity === 1 ? look.singular : look.plural).replace("{color}", colorWord)}${look.detail}`;
 };
 
 const fillerPhrase = (selection: BouquetSelection, filler: BuilderOption) =>
@@ -174,16 +126,20 @@ const FLOWER_SLOTS: Record<number, string[]> = {
   6: ["at the back left", "at the back center", "at the back right", "at the front left", "at the front center", "at the front right"]
 };
 
+// Which reference photos go with the prompt, in this order: a stock photo for style, then the wrap's own photo.
+interface PromptReferences {
+  style: boolean;
+  wrap: boolean;
+}
+
 // Patterned on the shop's existing customizer photos: a single wrapped bouquet, centered, front view,
 // on a plain white studio background with a soft shadow.
-export const buildPreviewPrompt = (selection: BouquetSelection, hasReference: boolean) => {
-  const { palette, ribbon } = selection;
-  const paperColor = PALETTE_PAPER_COLORS[palette.code] ?? "soft-colored";
-  const ribbonColor = PALETTE_RIBBON_COLORS[palette.code] ?? palette.name.toLowerCase();
+export const buildPreviewPrompt = (selection: BouquetSelection, references: PromptReferences) => {
+  const { palette, ribbon, wrap } = selection;
+  const paperColor = paperColorOf(palette);
+  const ribbonColor = ribbonColorOf(palette);
 
-  const flowerText = listText(
-    selection.flowers.map(({ option, quantity }) => flowerPhrase(selection, option, quantity))
-  );
+  const flowerText = listText(selection.flowers.map((flower) => flowerPhrase(flower, flower.quantity)));
   const totalStems = selection.flowers.reduce((total, flower) => total + flower.quantity, 0);
   const fillerText = selection.fillers.length > 0
     ? `, plus ${listText(selection.fillers.map((filler) => fillerPhrase(selection, filler)))}`
@@ -193,19 +149,23 @@ export const buildPreviewPrompt = (selection: BouquetSelection, hasReference: bo
 
   // Image models keep counts far better when each flower has its own spot.
   const slots = FLOWER_SLOTS[totalStems];
-  const stems = selection.flowers.flatMap(({ option, quantity }) => Array.from({ length: quantity }, () => option));
+  const stems = selection.flowers.flatMap((flower) => Array.from({ length: flower.quantity }, () => flower));
   const layoutText = slots
-    ? `Arrangement: ${listText(stems.map((option, index) => `${flowerPhrase(selection, option, 1)} ${slots[index]}`))}.`
+    ? `Arrangement: ${listText(stems.map((flower, index) => `${flowerPhrase(flower, 1)} ${slots[index]}`))}.`
     : null;
 
   return [
-    hasReference
-      ? "Match the attached shop photo's style (camera angle, framing, white background, shadow, lighting), but not its flowers, colors, paper or ribbon."
+    references.style
+      ? `Match the ${references.wrap ? "first " : ""}attached shop photo's style (camera angle, framing, white background, shadow, lighting), but not its flowers, colors, paper or ribbon.`
+      : null,
+    references.wrap
+      ? `The ${references.style ? "second " : ""}attached photo shows the ${wrap.name} wrap: copy how its paper is shaped, layered and folded, but make the paper ${paperColor}.`
       : null,
     `Photorealistic studio product photo of a florist bouquet with exactly ${flowerText}${fillerText}.`,
     layoutText,
     `It has exactly ${countWord(totalStems)} main ${totalStems === 1 ? "flower" : "flowers"} in total, each clearly visible, and no other kinds of flowers.`,
     `Wrapped in ${wrapText}, tied around the stems with ${ribbonText}.`,
+    `The ${palette.name.toLowerCase()} color palette applies only to the wrapping paper and ribbon; every flower keeps exactly the color named above.`,
     "Centered, front view, the whole bouquet in frame with white space around it, on a pure white background with a soft shadow.",
     "Every flower is a real variety in a true-to-life color, exactly as sold by florists in the Philippines.",
     "Soft studio lighting, sharp focus, real fresh flowers with natural textures. No text, no hands, no vase."
@@ -224,11 +184,11 @@ interface PreviewCheck {
 
 // Image models still miscount at times; a vision model compares each new image with the order first.
 const buildCheckPrompt = (selection: BouquetSelection) => {
-  const paperColor = PALETTE_PAPER_COLORS[selection.palette.code] ?? "soft-colored";
+  const paperColor = paperColorOf(selection.palette);
   return [
     "You are checking a product photo of a florist bouquet against the customer's order before it is shown to them.",
     "Order:",
-    ...selection.flowers.map(({ option, quantity }) => `- ${option.name}: ${flowerPhrase(selection, option, quantity)}`),
+    ...selection.flowers.map((flower) => `- ${flower.option.name}: ${flowerPhrase(flower, flower.quantity)}`),
     selection.fillers.length > 0
       ? `- Fillers: ${listText(selection.fillers.map((filler) => fillerPhrase(selection, filler)))}`
       : "- Fillers: none",
@@ -346,10 +306,15 @@ const reserveGeneration = (userId: string) => {
 const inFlight = new Map<string, Promise<string>>();
 
 const generateAndStore = async (key: string, selection: BouquetSelection, previews: BuilderPreview[], userId: string) => {
-  // Only Gemini can follow a reference photo; the text-only model relies on the prompt's style description.
-  const referenceUrl = supportsReferenceImages ? pickReference(selection, previews)?.image : undefined;
-  const reference = referenceUrl ? await fetchReference(referenceUrl) : null;
-  const prompt = buildPreviewPrompt(selection, reference !== null);
+  // Only Gemini can follow reference photos; the text-only model relies on the prompt's descriptions.
+  const styleUrl = supportsReferenceImages ? pickReference(selection, previews)?.image : undefined;
+  const wrapUrl = supportsReferenceImages ? selection.wrap.imageUrl : null;
+  const [styleReference, wrapReference] = await Promise.all([
+    styleUrl ? fetchReference(styleUrl) : null,
+    wrapUrl ? fetchReference(wrapUrl) : null
+  ]);
+  const references = [styleReference, wrapReference].filter((image) => image !== null);
+  const prompt = buildPreviewPrompt(selection, { style: styleReference !== null, wrap: wrapReference !== null });
 
   // With Gemini set up, only an image that passes the check is cached; after the last failed try the customizer
   // shows the stock photo. An image no model could check is shown once but not cached, so a later visit retries.
@@ -362,7 +327,7 @@ const generateAndStore = async (key: string, selection: BouquetSelection, previe
   for (let attempt = 1; attempt <= maxAttempts && !image && Date.now() - startedAt < timeBudgetMs; attempt += 1) {
     let candidate: InlineImage;
     try {
-      candidate = await generateImage(prompt, reference ? [reference] : []);
+      candidate = await generateImage(prompt, references);
     } catch {
       // The provider has already logged why.
       continue;

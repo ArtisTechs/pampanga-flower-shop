@@ -86,7 +86,7 @@ adminPaymentMethodsRouter.delete("/payment-methods/:id", async (req, res) => {
   res.status(204).end();
 });
 
-// Raw image body (Content-Type: image/jpeg|png|webp, max 2 MB) -> uploaded to Cloudinary.
+// Raw image body (Content-Type: image/jpeg|png|webp, max 3 MB) -> uploaded to Cloudinary.
 adminPaymentMethodsRouter.post("/uploads/payment-qr", rawImageBody, async (req, res) => {
   const { image, type } = requireUploadedImage(req);
   const { url } = await uploadImage(image, type, { folder: config.cloudinary.paymentQrFolder });

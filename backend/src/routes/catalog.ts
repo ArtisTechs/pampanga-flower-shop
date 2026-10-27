@@ -18,6 +18,7 @@ interface ProductRow extends RowDataPacket {
   name: string;
   description: string;
   price_php: number;
+  stock: number;
   image_path: string;
   best_seller: number;
   collection_type: CollectionType;
@@ -31,13 +32,15 @@ const toProduct = (row: ProductRow) => ({
   name: row.name,
   description: row.description,
   pricePhp: row.price_php,
+  // Bouquets left; 0 = sold out.
+  stock: row.stock,
   image: row.image_path,
   bestSeller: Boolean(row.best_seller),
   catalogFilters: [row.collection_type, ...(row.best_seller ? ["best-sellers" as const] : [])]
 });
 
 const PRODUCT_SELECT = `
-  SELECT p.id, p.category_id, p.name, p.description, p.price_php, p.image_path, p.best_seller, c.collection_type
+  SELECT p.id, p.category_id, p.name, p.description, p.price_php, p.stock, p.image_path, p.best_seller, c.collection_type
   FROM products p
   JOIN categories c ON c.id = p.category_id
   WHERE p.is_active = TRUE`;

@@ -11,6 +11,8 @@ import type {
   AdminUser,
   BouquetSelection,
   BuilderConfig,
+  BuilderOptionGroup,
+  BuilderOptionInput,
   CatalogCollection,
   ChangePasswordInput,
   CatalogListing,
@@ -84,11 +86,15 @@ export const fetchPaymentMethods = () => apiRequest<PaymentMethod[]>("/payment-m
 export const placeOrder = (input: { pickupAt: string; paymentMethodId: string; items: OrderItemInput[] }) =>
   apiRequest<PlacedOrder>("/orders", { method: "POST", body: input });
 
-// The payment screenshot (JPG, PNG, or WebP, max 2 MB); the shop verifies it before preparing the order.
+// The payment screenshot (JPG, PNG, or WebP, max 3 MB); the shop verifies it before preparing the order.
 export const uploadPaymentProof = (orderId: string, file: File) =>
   apiRequest<CustomerOrder>(`/orders/${encodeURIComponent(orderId)}/payment-proof`, { method: "POST", body: file });
 
 export const fetchMyOrders = () => apiRequest<CustomerOrder[]>("/orders");
+
+// Only while the order is still Pending; its stock goes back to the shop.
+export const cancelMyOrder = (orderId: string) =>
+  apiRequest<CustomerOrder>(`/orders/${encodeURIComponent(orderId)}/cancel`, { method: "POST" });
 
 export const fetchMyOrder = async (orderId: string) => {
   const order = await apiRequest<CustomerOrderDetail>(`/orders/${encodeURIComponent(orderId)}`);
@@ -120,7 +126,7 @@ export const resetPasswordRequest = (input: ResetPasswordInput) =>
 export const updateProfile = async (input: ProfileInput) =>
   (await apiRequest<{ account: Account }>("/account", { method: "PATCH", body: input })).account;
 
-// The file is sent as-is (JPG, PNG, or WebP, max 2 MB) and stored on Cloudinary.
+// The file is sent as-is (JPG, PNG, or WebP, max 3 MB) and stored on Cloudinary.
 export const uploadAvatar = async (file: File) =>
   (await apiRequest<{ account: Account }>("/account/avatar", { method: "POST", body: file })).account;
 
@@ -152,6 +158,10 @@ export const fetchAdminOrder = async (orderId: string) => {
 
 export const updateOrderStatus = (orderId: string, status: AdminOrderStatus) =>
   apiRequest<AdminOrder>(`/admin/orders/${encodeURIComponent(orderId)}`, { method: "PATCH", body: { status } });
+
+// Returns the order's stock; Completed orders can't be cancelled.
+export const cancelAdminOrder = (orderId: string, reason?: string) =>
+  apiRequest<AdminOrder>(`/admin/orders/${encodeURIComponent(orderId)}/cancel`, { method: "POST", body: { reason } });
 
 export const reviewOrderPayment = (orderId: string, decision: "Verified" | "Rejected", note?: string) =>
   apiRequest<AdminOrder>(`/admin/orders/${encodeURIComponent(orderId)}/payment`, {
@@ -191,11 +201,21 @@ export const saveSiteContent = (content: SiteContent) =>
 
 export const fetchBuilderOptions = () => apiRequest<AdminBuilderOption[]>("/admin/builder-options");
 
-export const updateBuilderOption = (optionId: string, changes: { available?: boolean; pricePhp?: number }) =>
+export const createBuilderOption = (group: BuilderOptionGroup, input: BuilderOptionInput) =>
+  apiRequest<AdminBuilderOption>("/admin/builder-options", { method: "POST", body: { ...input, group } });
+
+export const updateBuilderOption = (optionId: string, changes: BuilderOptionInput) =>
   apiRequest<AdminBuilderOption>(`/admin/builder-options/${encodeURIComponent(optionId)}`, {
     method: "PATCH",
     body: changes
   });
+
+export const deleteBuilderOption = (optionId: string) =>
+  apiRequest<void>(`/admin/builder-options/${encodeURIComponent(optionId)}`, { method: "DELETE" });
+
+// A photo of how a wrap looks (JPG, PNG, or WebP, max 3 MB); returns the image URL.
+export const uploadBuilderImage = async (file: File) =>
+  (await apiRequest<{ url: string }>("/admin/uploads/builder-image", { method: "POST", body: file })).url;
 
 export const fetchGeneratedPreviews = async () =>
   (await apiRequest<GeneratedBouquetPreview[]>("/admin/builder-previews")).map((preview) => withAssetImage(preview));

@@ -62,14 +62,14 @@ export const validateOtpCode = (value: string) =>
   /^\d{6}$/.test(value.trim()) ? undefined : "Enter the 6-digit code from your email";
 
 export const IMAGE_UPLOAD_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_IMAGE_UPLOAD_BYTES = 2 * 1024 * 1024;
+const MAX_IMAGE_UPLOAD_BYTES = 3 * 1024 * 1024;
 
-// Uploads (screenshots, QR codes) accept the same files as the API: JPG, PNG, or WebP up to 2 MB.
+// Uploads (screenshots, QR codes) accept the same files as the API: JPG, PNG, or WebP up to 3 MB.
 export const validateImageFile = (file: File) => {
   if (!IMAGE_UPLOAD_TYPES.includes(file.type)) {
     return "Use a JPG, PNG, or WebP image.";
   }
   return file.size > MAX_IMAGE_UPLOAD_BYTES
-    ? `This image is ${(file.size / 1024 / 1024).toFixed(1)} MB; the limit is 2 MB.`
+    ? `This image is ${(file.size / 1024 / 1024).toFixed(1)} MB; the limit is 3 MB.`
     : undefined;
 };

@@ -14,6 +14,8 @@ interface OrderItemRow extends RowDataPacket {
 interface OrderItemFlowerRow extends RowDataPacket {
   order_item_id: number;
   flower_name: string;
+  // NULL on orders placed before flower colors existed.
+  flower_color: string | null;
   quantity: number;
 }
 
@@ -30,7 +32,8 @@ export const loadOrderItems = async (orderId: string) => {
   );
   const [flowers] = items.length > 0
     ? await pool.query<OrderItemFlowerRow[]>(
-        "SELECT order_item_id, flower_name, quantity FROM order_item_flowers WHERE order_item_id IN (?) ORDER BY flower_name",
+        `SELECT order_item_id, flower_name, flower_color, quantity FROM order_item_flowers
+         WHERE order_item_id IN (?) ORDER BY flower_name, flower_color`,
         [items.map((item) => item.id)]
       )
     : [[] as OrderItemFlowerRow[]];
@@ -44,6 +47,6 @@ export const loadOrderItems = async (orderId: string) => {
     customization: item.customization,
     flowers: flowers
       .filter((flower) => flower.order_item_id === item.id)
-      .map((flower) => ({ name: flower.flower_name, quantity: flower.quantity }))
+      .map((flower) => ({ name: flower.flower_name, color: flower.flower_color, quantity: flower.quantity }))
   }));
 };

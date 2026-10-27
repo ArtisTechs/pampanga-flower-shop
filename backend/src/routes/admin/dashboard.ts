@@ -20,7 +20,8 @@ const ORDER_TOTALS_SQL = `
   SELECT COUNT(*) AS total_orders,
          COALESCE(SUM(total_php), 0) AS total_sales,
          COALESCE(SUM(status IN ('Pending', 'Ready')), 0) AS pending_pickups
-  FROM orders`;
+  FROM orders
+  WHERE status <> 'Cancelled'`;
 
 export const adminDashboardRouter = Router();
 

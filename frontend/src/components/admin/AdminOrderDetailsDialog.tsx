@@ -22,6 +22,7 @@ interface AdminOrderDetailsDialogProps {
   order: AdminOrder;
   isUpdating: boolean;
   onStatusChange: (orderId: string, status: AdminOrderStatus) => void;
+  onCancel: (orderId: string, reason: string) => Promise<boolean>;
   onPaymentReview: PaymentReviewHandler;
   onClose: () => void;
 }
@@ -37,7 +38,7 @@ interface PaymentReviewProps {
 const PaymentReview = ({ order, payment, isUpdating, onPaymentReview }: PaymentReviewProps) => {
   const [isRejecting, setIsRejecting] = useState(false);
   const [note, setNote] = useState("");
-  const canReview = order.paymentStatus === "For verification";
+  const canReview = order.paymentStatus === "For verification" && order.status !== "Cancelled";
 
   const handleReject = async () => {
     if (note.trim() && (await onPaymentReview(order.id, "Rejected", note.trim()))) {
@@ -95,6 +96,7 @@ const PaymentReview = ({ order, payment, isUpdating, onPaymentReview }: PaymentR
 
       {canReview && isRejecting ? (
         <div className="admin-payment-reject">
+          <p className="admin-ui-muted">Rejecting cancels the order and returns its flowers and bouquets to stock.</p>
           <label className="admin-product-field">
             <span className="admin-product-label">Reason (shown to the customer) <em>*</em></span>
             <textarea
@@ -111,7 +113,7 @@ const PaymentReview = ({ order, payment, isUpdating, onPaymentReview }: PaymentR
               Back
             </button>
             <button type="button" className="admin-payment-reject-button" onClick={handleReject} disabled={isUpdating || !note.trim()}>
-              {isUpdating ? "Rejecting..." : "Reject payment"}
+              {isUpdating ? "Rejecting..." : "Reject and cancel order"}
             </button>
           </div>
         </div>
@@ -130,10 +132,22 @@ const PaymentReview = ({ order, payment, isUpdating, onPaymentReview }: PaymentR
 };
 
 // `order` is the live row from the list (so status changes show immediately); items load separately.
-export const AdminOrderDetailsDialog = ({ order, isUpdating, onStatusChange, onPaymentReview, onClose }: AdminOrderDetailsDialogProps) => {
-  // Reloaded when the payment status changes so review times and notes stay current.
-  const details = useApiData(() => fetchAdminOrder(order.id), [order.id, order.paymentStatus]);
+export const AdminOrderDetailsDialog = ({
+  order, isUpdating, onStatusChange, onCancel, onPaymentReview, onClose
+}: AdminOrderDetailsDialogProps) => {
+  // Reloaded when the payment or order status changes so review times and notes stay current.
+  const details = useApiData(() => fetchAdminOrder(order.id), [order.id, order.paymentStatus, order.status]);
   const step = isPaymentSettled(order) ? nextStep[order.status] : undefined;
+  const canCancel = order.status === "Pending" || order.status === "Ready";
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+
+  const handleCancel = async () => {
+    if (await onCancel(order.id, cancelReason.trim())) {
+      setIsCancelling(false);
+      setCancelReason("");
+    }
+  };
 
   return (
     <AdminDialog
@@ -145,7 +159,12 @@ export const AdminOrderDetailsDialog = ({ order, isUpdating, onStatusChange, onP
       footer={
         <>
           <button type="button" className="admin-products-secondary" onClick={onClose}>Close</button>
-          {step ? (
+          {canCancel && !isCancelling ? (
+            <button type="button" className="admin-payment-reject-button" onClick={() => setIsCancelling(true)} disabled={isUpdating}>
+              Cancel order
+            </button>
+          ) : null}
+          {step && !isCancelling ? (
             <button
               type="button"
               className="admin-products-primary"
@@ -178,6 +197,37 @@ export const AdminOrderDetailsDialog = ({ order, isUpdating, onStatusChange, onP
           <dd><AdminOrderStatusSelect order={order} disabled={isUpdating} onStatusChange={onStatusChange} /></dd>
         </div>
       </dl>
+
+      {order.status === "Cancelled" ? (
+        <p className="admin-order-cancelled" role="status">
+          <strong>Cancelled.</strong> {order.cancelReason ?? "This order was cancelled."} Its stock was returned.
+        </p>
+      ) : null}
+
+      {canCancel && isCancelling ? (
+        <div className="admin-payment-reject">
+          <p className="admin-ui-muted">The order's flowers and bouquets go back to stock. This can't be undone.</p>
+          <label className="admin-product-field">
+            <span className="admin-product-label">Reason (shown to the customer, optional)</span>
+            <textarea
+              value={cancelReason}
+              onChange={(event) => setCancelReason(event.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="e.g. Out of the requested flowers for that date"
+              autoFocus
+            />
+          </label>
+          <div className="admin-payment-actions">
+            <button type="button" className="admin-products-secondary" onClick={() => setIsCancelling(false)} disabled={isUpdating}>
+              Back
+            </button>
+            <button type="button" className="admin-payment-reject-button" onClick={handleCancel} disabled={isUpdating}>
+              {isUpdating ? "Cancelling..." : "Cancel order"}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {details.data ? (
         <PaymentReview order={order} payment={details.data.payment} isUpdating={isUpdating} onPaymentReview={onPaymentReview} />

@@ -6,7 +6,12 @@ export const MAX_ITEM_QUANTITY = 20;
 
 const cartKey = (accountId: string) => `cart:${accountId}`;
 
-const clampQuantity = (quantity: number) => Math.min(Math.max(Math.floor(quantity), 1), MAX_ITEM_QUANTITY);
+/** Most of one item the cart allows: the API limit, or fewer when the shop has less in stock. */
+export const maxQuantityOf = (item: Pick<ProductItem, "stock">) => Math.min(MAX_ITEM_QUANTITY, item.stock ?? MAX_ITEM_QUANTITY);
+
+// Stock is only checked here, never taken: it's taken when the order is placed, and the API re-checks it then.
+const clampQuantity = (quantity: number, item: Pick<ProductItem, "stock">) =>
+  Math.min(Math.max(Math.floor(quantity), 1), Math.max(1, maxQuantityOf(item)));
 
 const readCart = (accountId: string): CartItem[] => {
   try {
@@ -55,18 +60,18 @@ export const useCart = (accountId: string | null) => {
       if (existingItem) {
         return currentItems.map((item) =>
           item.id === product.id
-            ? { ...item, quantity: clampQuantity(item.quantity + quantity) }
+            ? { ...item, stock: product.stock, quantity: clampQuantity(item.quantity + quantity, product) }
             : item
         );
       }
 
-      return [...currentItems, { ...product, quantity: clampQuantity(quantity) }];
+      return [...currentItems, { ...product, quantity: clampQuantity(quantity, product) }];
     });
   };
 
   const setItemQuantity = (productId: string, quantity: number) => {
     setItems((currentItems) => currentItems.map((item) =>
-      item.id === productId ? { ...item, quantity: clampQuantity(quantity) } : item
+      item.id === productId ? { ...item, quantity: clampQuantity(quantity, item) } : item
     ));
   };
 

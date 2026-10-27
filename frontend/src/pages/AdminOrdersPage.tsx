@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { errorMessage } from "../api/client";
-import { fetchAdminOrders, reviewOrderPayment, updateOrderStatus } from "../api/shop";
+import { cancelAdminOrder, fetchAdminOrders, reviewOrderPayment, updateOrderStatus } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
 import { LoadState } from "../components/LoadState";
 import { AdminLayout } from "../components/admin/AdminLayout";
@@ -33,7 +33,9 @@ export const AdminOrdersPage = ({ account, onLogout, onToast }: AdminOrdersPageP
   const viewingOrder = allOrders.find((order) => order.id === viewingOrderId) ?? null;
 
   const counts = useMemo(() => {
-    const result: Record<OrderFilter, number> = { All: allOrders.length, "To verify": 0, Pending: 0, Ready: 0, Completed: 0 };
+    const result: Record<OrderFilter, number> = {
+      All: allOrders.length, "To verify": 0, Pending: 0, Ready: 0, Completed: 0, Cancelled: 0
+    };
     allOrders.forEach((order) => {
       result[order.status] += 1;
       if (order.paymentStatus === "For verification") {
@@ -66,9 +68,24 @@ export const AdminOrdersPage = ({ account, onLogout, onToast }: AdminOrdersPageP
       onToast(
         decision === "Verified"
           ? `${updatedOrder.customerName}'s payment is verified. You can now prepare the order.`
-          : `${updatedOrder.customerName}'s payment was rejected. They can upload a new screenshot.`,
+          : `${updatedOrder.customerName}'s payment was rejected and the order cancelled. Its stock was returned.`,
         "success"
       );
+      return true;
+    } catch (error) {
+      onToast(errorMessage(error), "error");
+      return false;
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const handleCancel = async (orderId: string, reason: string) => {
+    setUpdatingOrderId(orderId);
+    try {
+      const updatedOrder = await cancelAdminOrder(orderId, reason || undefined);
+      replaceOrder(updatedOrder);
+      onToast(`${updatedOrder.customerName}'s order was cancelled and its stock returned.`, "success");
       return true;
     } catch (error) {
       onToast(errorMessage(error), "error");
@@ -143,6 +160,7 @@ export const AdminOrdersPage = ({ account, onLogout, onToast }: AdminOrdersPageP
           order={viewingOrder}
           isUpdating={updatingOrderId === viewingOrder.id}
           onStatusChange={handleStatusChange}
+          onCancel={handleCancel}
           onPaymentReview={handlePaymentReview}
           onClose={() => setViewingOrderId(null)}
         />

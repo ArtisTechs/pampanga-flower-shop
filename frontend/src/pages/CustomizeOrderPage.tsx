@@ -14,7 +14,9 @@ import type {
   CustomBouquetSummary,
   ProductItem
 } from "../types/shop";
+import { resolveImagePath } from "../utils/assets";
 import { formatPhpCurrency } from "../utils/currency";
+import { isSoldOut, stockLabel, stockLimit } from "../utils/stock";
 
 type CustomizeStep = "flowers" | "style" | "preview";
 
@@ -37,6 +39,12 @@ const findOption = (options: BuilderOption[], id: string) =>
   options.find((option) => option.id === id) ?? options[0];
 
 const choiceFrom = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
+
+// Every flower starts in its admin-set default color.
+const defaultFlowerColors = (flowers: BuilderOption[]) =>
+  Object.fromEntries(
+    flowers.map((flower) => [flower.id, (flower.colorChoices.find((color) => color.isDefault) ?? flower.colorChoices[0])?.name ?? ""])
+  );
 
 export const CustomizeOrderPage = ({ onAddToCart, onToast }: CustomizeOrderPageProps) => {
   const builder = useApiData(fetchBuilder, []);
@@ -79,6 +87,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
   const [flowerCounts, setFlowerCounts] = useState<Record<string, number>>(
     Object.fromEntries(flowers.map((flower) => [flower.id, 0]))
   );
+  const [flowerColors, setFlowerColors] = useState<Record<string, string>>(() => defaultFlowerColors(flowers));
   const [selectedFillers, setSelectedFillers] = useState<string[]>([]);
   const [selectedPalette, setSelectedPalette] = useState(() => defaultChoice(palettes, preferredDefaults.palette));
   const [selectedWrap, setSelectedWrap] = useState(() => defaultChoice(wraps, preferredDefaults.wrap));
@@ -102,6 +111,8 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
   const selectedFlowers = flowers.filter((flower) => flowerCounts[flower.id] > 0);
   const selectedFillerOptions = fillers.filter((filler) => selectedFillers.includes(filler.id));
   const totalFlowerCount = selectedFlowers.reduce((total, flower) => total + flowerCounts[flower.id], 0);
+  const flowerColorOf = (flower: BuilderOption) =>
+    flower.colorChoices.find((color) => color.name === flowerColors[flower.id]) ?? null;
   const totalPrice = useMemo(
     () => selectedSizeOption.pricePhp + selectedPaletteOption.pricePhp + selectedWrapOption.pricePhp + selectedRibbonOption.pricePhp
       + selectedFlowers.reduce((total, flower) => total + flower.pricePhp * flowerCounts[flower.id], 0)
@@ -116,7 +127,11 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
     palette: selectedPaletteOption.id,
     wrap: selectedWrapOption.id,
     ribbon: selectedRibbonOption.id,
-    flowers: selectedFlowers.map((flower) => ({ code: flower.id, quantity: flowerCounts[flower.id] })),
+    flowers: selectedFlowers.map((flower) => ({
+      code: flower.id,
+      quantity: flowerCounts[flower.id],
+      ...(flowerColorOf(flower) ? { color: flowerColors[flower.id] } : {})
+    })),
     fillers: selectedFillerOptions.map((filler) => filler.id)
   };
   const bouquetSummary: CustomBouquetSummary = {
@@ -124,7 +139,11 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
     palette: selectedPaletteOption.name,
     wrap: selectedWrapOption.name,
     ribbon: selectedRibbonOption.name,
-    flowers: selectedFlowers.map((flower) => ({ name: flower.name, quantity: flowerCounts[flower.id] })),
+    flowers: selectedFlowers.map((flower) => ({
+      name: flower.name,
+      quantity: flowerCounts[flower.id],
+      color: flowerColorOf(flower)?.name ?? null
+    })),
     fillers: selectedFillerOptions.map((filler) => filler.name)
   };
   const selectionSignature = JSON.stringify(selection);
@@ -198,11 +217,13 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
   const isPreviewLoading = step === "preview" && (!currentPreview || currentPreview.status === "loading");
   const previewImage = currentPreview?.image ?? stockPreviewImage;
 
+  const stemsLeft = (flowerId: string) => stockLimit(flowers.find((flower) => flower.id === flowerId)?.stock);
+
   const updateFlowerCount = (flowerId: string, amount: number) => {
     setFlowerCounts((currentCounts) => {
       const currentTotal = Object.values(currentCounts).reduce((total, count) => total + count, 0);
 
-      if (amount > 0 && currentTotal >= maxFlowerCount) {
+      if (amount > 0 && (currentTotal >= maxFlowerCount || currentCounts[flowerId] >= stemsLeft(flowerId))) {
         return currentCounts;
       }
 
@@ -215,27 +236,33 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
 
   const toggleFiller = (fillerId: string) => {
     setSelectedFillers((current) =>
-      current.includes(fillerId) ? current.filter((id) => id !== fillerId) : [...current, fillerId]
+      current.includes(fillerId)
+        ? current.filter((id) => id !== fillerId)
+        : isSoldOut(fillers.find((filler) => filler.id === fillerId)?.stock) ? current : [...current, fillerId]
     );
   };
 
   const handleSurpriseMe = () => {
     const nextCounts = Object.fromEntries(flowers.map((flower) => [flower.id, 0]));
-    const shuffledFlowers = [...flowers].sort(() => Math.random() - 0.5).slice(0, 3);
+    const shuffledFlowers = flowers.filter((flower) => !isSoldOut(flower.stock)).sort(() => Math.random() - 0.5).slice(0, 3);
 
     shuffledFlowers.forEach((flower) => {
       const currentTotal = Object.values(nextCounts).reduce((total, count) => total + count, 0);
       const remainingSlots = maxFlowerCount - currentTotal;
 
       if (remainingSlots > 0) {
-        nextCounts[flower.id] = Math.min(Math.floor(Math.random() * 3) + 1, remainingSlots);
+        nextCounts[flower.id] = Math.min(Math.floor(Math.random() * 3) + 1, remainingSlots, stockLimit(flower.stock));
       }
     });
 
     setSelectedSize(choiceFrom(bouquetSizes).id);
     setFlowerCounts(nextCounts);
+    setFlowerColors(Object.fromEntries(
+      flowers.map((flower) => [flower.id, flower.colorChoices.length > 0 ? choiceFrom(flower.colorChoices).name : ""])
+    ));
     setSelectedFillers(
-      [...fillers].sort(() => Math.random() - 0.5).slice(0, Math.floor(Math.random() * 3)).map((filler) => filler.id)
+      fillers.filter((filler) => !isSoldOut(filler.stock)).sort(() => Math.random() - 0.5)
+        .slice(0, Math.floor(Math.random() * 3)).map((filler) => filler.id)
     );
     setSelectedPalette(choiceFrom(palettes).id);
     setSelectedWrap(choiceFrom(wraps).id);
@@ -255,6 +282,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
   const resetCustomization = () => {
     setSelectedSize(defaultChoice(bouquetSizes, preferredDefaults.size));
     setFlowerCounts(Object.fromEntries(flowers.map((flower) => [flower.id, 0])));
+    setFlowerColors(defaultFlowerColors(flowers));
     setSelectedFillers([]);
     setSelectedPalette(defaultChoice(palettes, preferredDefaults.palette));
     setSelectedWrap(defaultChoice(wraps, preferredDefaults.wrap));
@@ -274,7 +302,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
 
   const handleAddCustomBouquet = (event: MouseEvent<HTMLButtonElement>) => {
     const flowerSummary = selectedFlowers
-      .map((flower) => `${flower.name} x${flowerCounts[flower.id]}`)
+      .map((flower) => `${flowerColorOf(flower) ? `${flowerColors[flower.id]} ` : ""}${flower.name} x${flowerCounts[flower.id]}`)
       .join(", ");
     const fillerSummary = selectedFillerOptions.length > 0
       ? ` with ${selectedFillerOptions.map((filler) => filler.name).join(", ")}`
@@ -389,12 +417,35 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                 <span>{totalFlowerCount}/{maxFlowerCount} flowers selected</span>
               </div>
               <div className="flower-choice-grid">
-                {flowers.map((flower) => (
-                  <article key={flower.id} className={`flower-choice ${flowerCounts[flower.id] > 0 ? "selected" : ""}`}>
-                    <span className="flower-dot" style={{ backgroundColor: flower.colors[0] }} aria-hidden="true" />
+                {flowers.map((flower) => {
+                  const soldOut = isSoldOut(flower.stock);
+                  const stockText = stockLabel(flower.stock, flower.stockUnit ?? "stems");
+                  return (
+                  <article
+                    key={flower.id}
+                    className={`flower-choice ${flowerCounts[flower.id] > 0 ? "selected" : ""} ${soldOut ? "sold-out" : ""}`}
+                  >
+                    <span
+                      className="flower-dot"
+                      style={{ backgroundColor: flowerColorOf(flower)?.hex ?? flower.colors[0] }}
+                      aria-hidden="true"
+                    />
                     <div>
                       <strong>{flower.name}</strong>
                       <span>+{formatPhpCurrency(flower.pricePhp)} per pc</span>
+                      {stockText ? <span className={`stock-note ${soldOut ? "sold-out" : ""}`}>{stockText}</span> : null}
+                      {flower.colorChoices.length > 0 ? (
+                        <select
+                          className="flower-color-select"
+                          value={flowerColors[flower.id]}
+                          onChange={(event) => setFlowerColors((current) => ({ ...current, [flower.id]: event.target.value }))}
+                          aria-label={`${flower.name} color`}
+                        >
+                          {flower.colorChoices.map((color) => (
+                            <option key={color.name} value={color.name}>{color.name}</option>
+                          ))}
+                        </select>
+                      ) : null}
                     </div>
                     <div className="flower-stepper" aria-label={`${flower.name} quantity`}>
                       <button type="button" onClick={() => updateFlowerCount(flower.id, -1)} aria-label={`Remove ${flower.name}`}>
@@ -405,13 +456,14 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                         type="button"
                         onClick={() => updateFlowerCount(flower.id, 1)}
                         aria-label={`Add ${flower.name}`}
-                        disabled={totalFlowerCount >= maxFlowerCount}
+                        disabled={totalFlowerCount >= maxFlowerCount || flowerCounts[flower.id] >= stockLimit(flower.stock)}
                       >
                         +
                       </button>
                     </div>
                   </article>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -424,17 +476,21 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                 <div className="flower-choice-grid">
                   {fillers.map((filler) => {
                     const isSelected = selectedFillers.includes(filler.id);
+                    const soldOut = isSoldOut(filler.stock);
+                    const stockText = stockLabel(filler.stock, filler.stockUnit ?? "bunches");
                     return (
-                      <article key={filler.id} className={`flower-choice ${isSelected ? "selected" : ""}`}>
+                      <article key={filler.id} className={`flower-choice ${isSelected ? "selected" : ""} ${soldOut ? "sold-out" : ""}`}>
                         <span className="flower-dot" style={{ backgroundColor: filler.colors[0] }} aria-hidden="true" />
                         <div>
                           <strong>{filler.name}</strong>
                           <span>+{formatPhpCurrency(filler.pricePhp)}</span>
+                          {stockText ? <span className={`stock-note ${soldOut ? "sold-out" : ""}`}>{stockText}</span> : null}
                         </div>
                         <button
                           type="button"
                           className={`filler-toggle ${isSelected ? "selected" : ""}`}
                           onClick={() => toggleFiller(filler.id)}
+                          disabled={soldOut && !isSelected}
                           aria-pressed={isSelected}
                           aria-label={`${isSelected ? "Remove" : "Add"} ${filler.name}`}
                         >
@@ -450,7 +506,17 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
         ) : step === "style" ? (
           <>
             <div className="customize-section">
-              <h2>Color Palette</h2>
+              <div className="customize-section-title">
+                <h2>Color Palette</h2>
+                <span className="info-tooltip">
+                  <button type="button" className="info-tooltip-trigger" aria-describedby="palette-tooltip" aria-label="About the color palette">
+                    i
+                  </button>
+                  <span id="palette-tooltip" role="tooltip" className="info-tooltip-bubble">
+                    The palette is only applied to the wrapper and ribbon. Your flowers keep the colors you chose for them.
+                  </span>
+                </span>
+              </div>
               <div className="palette-grid">
                 {palettes.map((palette) => (
                   <button
@@ -474,17 +540,20 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
 
             <div className="customize-section">
               <h2>Wrap Style</h2>
-              <div className="pill-choice-grid">
+              <div className={`pill-choice-grid ${wraps.some((wrap) => wrap.imageUrl) ? "has-images" : ""}`}>
                 {wraps.map((wrap) => (
                   <button
                     key={wrap.id}
                     type="button"
-                    className={`custom-choice ${selectedWrap === wrap.id ? "selected" : ""}`}
+                    className={`custom-choice ${wrap.imageUrl ? "wrap-choice-with-image" : ""} ${selectedWrap === wrap.id ? "selected" : ""}`}
                     onClick={() => setSelectedWrap(wrap.id)}
                     aria-pressed={selectedWrap === wrap.id}
                   >
-                    {wrap.name}
-                    {wrap.pricePhp > 0 ? <small className="custom-choice-price">+{formatPhpCurrency(wrap.pricePhp)}</small> : null}
+                    {wrap.imageUrl ? <img src={resolveImagePath(wrap.imageUrl, 400)} alt="" loading="lazy" /> : null}
+                    <span>
+                      {wrap.name}
+                      {wrap.pricePhp > 0 ? <small className="custom-choice-price">+{formatPhpCurrency(wrap.pricePhp)}</small> : null}
+                    </span>
                   </button>
                 ))}
               </div>

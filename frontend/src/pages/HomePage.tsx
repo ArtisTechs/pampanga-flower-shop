@@ -4,7 +4,7 @@ import { fetchHome, fetchProducts } from "../api/shop";
 import { EmphasisText } from "../components/EmphasisText";
 import { FeaturedCarousel } from "../components/FeaturedCarousel";
 import { FallingPetals } from "../components/FallingPetals";
-import { hasLineIcon, LineIcon } from "../components/LineIcon";
+import { LineIcon } from "../components/LineIcon";
 import { LoadState } from "../components/LoadState";
 import { useApiData } from "../hooks/useApiData";
 import type { SiteContent } from "../types/shop";
@@ -67,7 +67,7 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent, siteContentE
   const backdrop = (
     <div
       className="home-backdrop"
-      style={{ "--home-backdrop-image": `url("${siteImage("home-florals.svg")}")` } as CSSProperties}
+      style={{ "--home-backdrop-image": `url("${siteImage("home-background.jpg")}")` } as CSSProperties}
       aria-hidden="true"
     />
   );
@@ -116,9 +116,7 @@ export const HomePage = ({ isLoggedIn, onRequireLogin, siteContent, siteContentE
           <div className="hero-perks" aria-label="Shop benefits">
             {perks.map((perk) => (
               <p key={perk.id} className="hero-perk">
-                <span className="hero-perk-icon" aria-hidden="true">
-                  {hasLineIcon(perk.id) ? <LineIcon name={perk.id} /> : perk.icon}
-                </span>
+                <span className="hero-perk-icon" aria-hidden="true">{perk.icon}</span>
                 {perk.label}
               </p>
             ))}

@@ -13,6 +13,9 @@ export const config = {
   port: Number(process.env.PORT ?? 4000),
   // Apply pending migrations when the server starts; set AUTO_MIGRATE=false to only run them by hand.
   autoMigrate: process.env.AUTO_MIGRATE !== "false",
+  // Orders still awaiting the customer's payment screenshot after this many hours are cancelled and their
+  // stock returned; 0 turns this off.
+  unpaidOrderCancelHours: Math.max(0, Number(process.env.ORDER_UNPAID_CANCEL_HOURS ?? 24)),
   corsOrigins: (process.env.CORS_ORIGIN ?? "http://localhost:5173")
     .split(",")
     .map((origin) => origin.trim())
@@ -26,7 +29,8 @@ export const config = {
     avatarFolder: process.env.CLOUDINARY_AVATAR_FOLDER ?? "pampanga-flower-shop/avatars",
     paymentQrFolder: process.env.CLOUDINARY_PAYMENT_QR_FOLDER ?? "pampanga-flower-shop/payment-qr",
     paymentProofFolder: process.env.CLOUDINARY_PAYMENT_PROOF_FOLDER ?? "pampanga-flower-shop/payment-proofs",
-    builderPreviewFolder: process.env.CLOUDINARY_BUILDER_PREVIEW_FOLDER ?? "pampanga-flower-shop/catalog/customize-previews/generated"
+    builderPreviewFolder: process.env.CLOUDINARY_BUILDER_PREVIEW_FOLDER ?? "pampanga-flower-shop/catalog/customize-previews/generated",
+    builderOptionFolder: process.env.CLOUDINARY_BUILDER_OPTION_FOLDER ?? "pampanga-flower-shop/catalog/builder-options"
   },
   // Optional: customizer preview images. Without the chosen provider's credentials, the customizer shows the
   // closest stock preview instead.

@@ -4,9 +4,10 @@ import { pool } from "../../db/pool.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { isCloudinaryImageUrl, uploadImage } from "../../services/cloudinary.js";
 import { rawImageBody, requireUploadedImage } from "../../utils/images.js";
-import { bodyOf, requireId, requireString } from "../../utils/validate.js";
+import { bodyOf, requireId, requireInt, requireString } from "../../utils/validate.js";
 
 const MAX_PRICE_PHP = 1_000_000;
+const MAX_STOCK = 100_000;
 
 interface AdminProductRow extends RowDataPacket {
   id: string;
@@ -15,13 +16,14 @@ interface AdminProductRow extends RowDataPacket {
   name: string;
   description: string;
   price_php: number;
+  stock: number;
   image_path: string;
   best_seller: number;
   is_active: number;
 }
 
 const PRODUCT_SELECT = `
-  SELECT p.id, p.category_id, c.title AS category_title, p.name, p.description, p.price_php,
+  SELECT p.id, p.category_id, c.title AS category_title, p.name, p.description, p.price_php, p.stock,
          p.image_path, p.best_seller, p.is_active
   FROM products p
   JOIN categories c ON c.id = p.category_id`;
@@ -34,6 +36,7 @@ const toAdminProduct = (row: AdminProductRow) => ({
   name: row.name,
   description: row.description,
   pricePhp: row.price_php,
+  stock: row.stock,
   imagePath: row.image_path,
   bestSeller: Boolean(row.best_seller),
   active: Boolean(row.is_active)
@@ -76,6 +79,8 @@ const parseProductInput = async (body: Record<string, unknown>) => {
     name: requireString(body.name, "Name", 160),
     description,
     pricePhp,
+    // Bouquets left to sell; orders take from it and cancellations return it.
+    stock: requireInt(body.stock, "Stock", 0, MAX_STOCK),
     imagePath: requireImagePath(body.imagePath),
     bestSeller: body.bestSeller,
     active: body.active
@@ -127,9 +132,12 @@ adminProductsRouter.post("/products", async (req, res) => {
   const id = await generateProductId(input.categoryId, input.name);
 
   await pool.query(
-    `INSERT INTO products (id, category_id, name, description, price_php, image_path, best_seller, is_active, sort_order)
-     SELECT ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(MAX(sort_order), 0) + 1 FROM products WHERE category_id = ?`,
-    [id, input.categoryId, input.name, input.description, input.pricePhp, input.imagePath, input.bestSeller, input.active, input.categoryId]
+    `INSERT INTO products (id, category_id, name, description, price_php, stock, image_path, best_seller, is_active, sort_order)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(MAX(sort_order), 0) + 1 FROM products WHERE category_id = ?`,
+    [
+      id, input.categoryId, input.name, input.description, input.pricePhp, input.stock, input.imagePath, input.bestSeller, input.active,
+      input.categoryId
+    ]
   );
   res.status(201).json(await findProduct(id));
 });
@@ -141,14 +149,14 @@ adminProductsRouter.patch("/products/:id", async (req, res) => {
 
   await pool.query(
     `UPDATE products
-     SET category_id = ?, name = ?, description = ?, price_php = ?, image_path = ?, best_seller = ?, is_active = ?
+     SET category_id = ?, name = ?, description = ?, price_php = ?, stock = ?, image_path = ?, best_seller = ?, is_active = ?
      WHERE id = ?`,
-    [input.categoryId, input.name, input.description, input.pricePhp, input.imagePath, input.bestSeller, input.active, id]
+    [input.categoryId, input.name, input.description, input.pricePhp, input.stock, input.imagePath, input.bestSeller, input.active, id]
   );
   res.json(await findProduct(id));
 });
 
-// Raw image body (Content-Type: image/jpeg|png|webp, max 2 MB) -> uploaded to Cloudinary.
+// Raw image body (Content-Type: image/jpeg|png|webp, max 3 MB) -> uploaded to Cloudinary.
 adminProductsRouter.post("/uploads/product-image", rawImageBody, async (req, res) => {
   const { image, type } = requireUploadedImage(req);
   const { url } = await uploadImage(image, type);

@@ -14,6 +14,7 @@ import { config } from "../config.js";
 import { loadOrderItems } from "../db/orders.js";
 import { findPaymentMethod } from "../db/paymentMethods.js";
 import { pool } from "../db/pool.js";
+import { cancelOrder, reserveStock, withTransaction, type StockNeed } from "../db/stock.js";
 import { currentUser, requireAuth } from "../middleware/auth.js";
 import { HttpError } from "../middleware/errorHandler.js";
 import { uploadImage } from "../services/cloudinary.js";
@@ -38,8 +39,9 @@ interface OrderLine {
   unitPricePhp: number;
   quantity: number;
   customization: { size: string; palette: string; wrap: string; ribbon: string; fillers: string[] } | null;
-  flowers: Array<{ code: string; name: string; quantity: number }>;
+  flowers: Array<{ code: string; name: string; color: string; quantity: number }>;
   previewImage: string | null;
+  stock: StockNeed[];
 }
 
 const parsePickupAt = (value: unknown) => {
@@ -63,9 +65,17 @@ const buildCustomLine = async (
   maxFlowers: number
 ): Promise<OrderLine> => {
   const { size, palette, wrap, ribbon, flowers, fillers } = parseBouquetSelection(custom, options, maxFlowers);
-  const flowerSummary = flowers.map(({ option, quantity: count }) => `${option.name} x${count}`).join(", ");
+  const flowerSummary = flowers.map(({ option, color, quantity: count }) => `${color.name} ${option.name} x${count}`).join(", ");
   const fillerSummary = fillers.length > 0 ? ` with ${fillers.map((filler) => filler.name).join(", ")}` : "";
   const selection = { size, palette, wrap, ribbon, flowers, fillers };
+  // Stems per bouquet times bouquets; each filler is one bunch per bouquet. Options without an inventory row
+  // aren't stock-limited.
+  const stock: StockNeed[] = [
+    ...flowers.map(({ option, quantity: count }) => ({ option, perBouquet: count })),
+    ...fillers.map((option) => ({ option, perBouquet: 1 }))
+  ].flatMap(({ option, perBouquet }) => option.inventoryItemId
+    ? [{ source: "inventory" as const, id: option.inventoryItemId, name: option.name, unit: option.stockUnit ?? "stems", quantity: perBouquet * quantity }]
+    : []);
 
   return {
     productId: null,
@@ -82,20 +92,24 @@ const buildCustomLine = async (
       ribbon: ribbon.name,
       fillers: fillers.map((filler) => filler.name)
     },
-    flowers: flowers.map(({ option, quantity: count }) => ({ code: option.code, name: option.name, quantity: count })),
-    previewImage: await findGeneratedPreview(selectionKey(selection))
+    flowers: flowers.map(({ option, color, quantity: count }) => ({
+      code: option.code, name: option.name, color: color.name, quantity: count
+    })),
+    previewImage: await findGeneratedPreview(selectionKey(selection)),
+    stock
   };
 };
 
-// Payment states in which the customer may (re)send a screenshot.
-const PROOF_UPLOAD_STATUSES = ["Awaiting payment", "Rejected"];
+// The customer sends the screenshot once; a rejected payment cancels the order (and returns its stock).
+const PROOF_UPLOAD_STATUSES = ["Awaiting payment"];
 
 interface MyOrderRow extends RowDataPacket {
   id: string;
   pickup_at: Date;
   created_at: Date;
   total_php: number;
-  status: "Pending" | "Ready" | "Completed";
+  status: "Pending" | "Ready" | "Completed" | "Cancelled";
+  cancel_reason: string | null;
   payment_status: "Pay on pick-up" | "Awaiting payment" | "For verification" | "Verified" | "Rejected";
   payment_provider: string | null;
   payment_account_name: string | null;
@@ -118,12 +132,13 @@ const toCustomerOrder = (row: MyOrderRow) => ({
     ? { provider: row.payment_provider, accountName: row.payment_account_name, accountNumber: row.payment_account_number }
     : null,
   paymentNote: row.payment_note,
+  cancelReason: row.cancel_reason,
   itemCount: Number(row.item_count),
   itemNames: row.item_names ? row.item_names.split("\n") : []
 });
 
 const MY_ORDER_SELECT = `
-  SELECT o.id, o.pickup_at, o.created_at, o.total_php, o.status, o.payment_status,
+  SELECT o.id, o.pickup_at, o.created_at, o.total_php, o.status, o.cancel_reason, o.payment_status,
          o.payment_provider, o.payment_account_name, o.payment_account_number, o.payment_note,
          COALESCE(SUM(oi.quantity), 0) AS item_count,
          GROUP_CONCAT(oi.product_name ORDER BY oi.id SEPARATOR '\\n') AS item_names
@@ -195,7 +210,8 @@ ordersRouter.post("/", requireAuth, async (req, res) => {
       throw new HttpError(400, "A product in your cart is no longer available");
     }
     return {
-      productId: product.id, name: product.name, unitPricePhp: product.price_php, quantity, customization: null, flowers: [], previewImage: null
+      productId: product.id, name: product.name, unitPricePhp: product.price_php, quantity, customization: null, flowers: [], previewImage: null,
+      stock: [{ source: "product" as const, id: product.id, name: product.name, unit: "bouquets", quantity }]
     };
   }));
 
@@ -203,10 +219,9 @@ ordersRouter.post("/", requireAuth, async (req, res) => {
   const sizeName = lines.find((line) => line.customization)?.customization?.size;
   const bouquetSize = sizeName && ORDER_BOUQUET_SIZES.includes(sizeName) ? sizeName : null;
   const orderId = randomUUID();
-  const connection = await pool.getConnection();
 
-  try {
-    await connection.beginTransaction();
+  // Stock is only taken here, when the order is placed (never for the cart), in the same transaction as the order.
+  await withTransaction(async (connection) => {
     await connection.query(
       `INSERT INTO orders (id, user_id, customer_name, contact_number, bouquet_size, pickup_at, total_php,
                            payment_status, payment_provider, payment_account_name, payment_account_number)
@@ -227,18 +242,13 @@ ordersRouter.post("/", requireAuth, async (req, res) => {
       );
       if (line.flowers.length > 0) {
         await connection.query(
-          "INSERT INTO order_item_flowers (order_item_id, flower_code, flower_name, quantity) VALUES ?",
-          [line.flowers.map((flower) => [result.insertId, flower.code, flower.name, flower.quantity])]
+          "INSERT INTO order_item_flowers (order_item_id, flower_code, flower_name, flower_color, quantity) VALUES ?",
+          [line.flowers.map((flower) => [result.insertId, flower.code, flower.name, flower.color, flower.quantity])]
         );
       }
     }
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
+    await reserveStock(connection, orderId, lines.flatMap((line) => line.stock));
+  });
 
   res.status(201).json({
     id: orderId,
@@ -250,20 +260,42 @@ ordersRouter.post("/", requireAuth, async (req, res) => {
 });
 
 interface PaymentStateRow extends RowDataPacket {
+  status: string;
   payment_status: string;
 }
 
-// Raw image body (Content-Type: image/jpeg|png|webp, max 2 MB): the customer's payment screenshot.
-// Sent right after placing the order, or again after the shop rejected the previous one.
+// The customer may cancel their own order while it's still Pending; its stock goes back.
+ordersRouter.post("/:id/cancel", requireAuth, async (req, res) => {
+  const user = currentUser(res);
+  const id = requireId(req.params.id, "order");
+  const cancelled = await cancelOrder(id, "Cancelled by the customer.", { statuses: ["Pending"], userId: user.id });
+  const [rows] = await pool.query<MyOrderRow[]>(
+    `${MY_ORDER_SELECT} WHERE o.id = ? AND o.user_id = ? GROUP BY o.id`,
+    [id, user.id]
+  );
+  if (rows.length === 0) {
+    throw new HttpError(404, "Order not found");
+  }
+  if (!cancelled) {
+    throw new HttpError(409, "Only orders that are still pending can be cancelled");
+  }
+  res.json(toCustomerOrder(rows[0]));
+});
+
+// Raw image body (Content-Type: image/jpeg|png|webp, max 3 MB): the customer's payment screenshot,
+// sent right after placing the order.
 ordersRouter.post("/:id/payment-proof", requireAuth, rawImageBody, async (req, res) => {
   const user = currentUser(res);
   const id = requireId(req.params.id, "order");
   const [orders] = await pool.query<PaymentStateRow[]>(
-    "SELECT payment_status FROM orders WHERE id = ? AND user_id = ?",
+    "SELECT status, payment_status FROM orders WHERE id = ? AND user_id = ?",
     [id, user.id]
   );
   if (orders.length === 0) {
     throw new HttpError(404, "Order not found");
+  }
+  if (orders[0].status === "Cancelled") {
+    throw new HttpError(409, "This order was cancelled");
   }
   if (!PROOF_UPLOAD_STATUSES.includes(orders[0].payment_status)) {
     throw new HttpError(409, "This order's payment has already been sent for verification");
@@ -278,7 +310,7 @@ ordersRouter.post("/:id/payment-proof", requireAuth, rawImageBody, async (req, r
     `UPDATE orders
      SET payment_status = 'For verification', payment_proof_url = ?, payment_submitted_at = CURRENT_TIMESTAMP,
          payment_reviewed_at = NULL, payment_note = NULL
-     WHERE id = ? AND user_id = ? AND payment_status IN (?)`,
+     WHERE id = ? AND user_id = ? AND status = 'Pending' AND payment_status IN (?)`,
     [url, id, user.id, PROOF_UPLOAD_STATUSES]
   );
 

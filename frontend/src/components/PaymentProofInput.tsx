@@ -44,7 +44,7 @@ export const PaymentProofInput = ({ file, onChange, disabled = false }: PaymentP
         ) : (
           <span>
             <strong>Attach payment screenshot</strong>
-            <small>JPG, PNG, or WebP · up to 2 MB</small>
+            <small>JPG, PNG, or WebP · up to 3 MB</small>
           </span>
         )}
       </label>

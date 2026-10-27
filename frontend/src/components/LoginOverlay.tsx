@@ -179,8 +179,7 @@ export const LoginOverlay = ({ shopName, onLogin, onRegister, onResetPassword, o
         email: validateEmail(email),
         code: validateEmail(email) ? undefined : validateCodeField(),
         contactNumber: validateContactNumber(contactNumber),
-        password: validateNewPassword(password),
-        confirmPassword: validatePasswordMatch(password, confirmPassword)
+        password: validateNewPassword(password)
       };
       if (hasErrors(nextErrors)) {
         return;
@@ -262,16 +261,19 @@ export const LoginOverlay = ({ shopName, onLogin, onRegister, onResetPassword, o
         error={errors.password}
         hint={<PasswordRules password={password} />}
       />
-      <LoginField
-        name="confirmPassword"
-        type="password"
-        autoComplete="new-password"
-        value={confirmPassword}
-        onChange={(event) => updateField("confirmPassword", setConfirmPassword)(event.target.value)}
-        placeholder="Confirm Password"
-        error={errors.confirmPassword}
-        hint={confirmPassword ? <PasswordMatch password={password} confirmation={confirmPassword} /> : undefined}
-      />
+      {/* Sign-up relies on the show-password toggle instead of a second entry; reset still confirms. */}
+      {authMode === "reset" ? (
+        <LoginField
+          name="confirmPassword"
+          type="password"
+          autoComplete="new-password"
+          value={confirmPassword}
+          onChange={(event) => updateField("confirmPassword", setConfirmPassword)(event.target.value)}
+          placeholder="Confirm Password"
+          error={errors.confirmPassword}
+          hint={confirmPassword ? <PasswordMatch password={password} confirmation={confirmPassword} /> : undefined}
+        />
+      ) : null}
     </>
   );
 

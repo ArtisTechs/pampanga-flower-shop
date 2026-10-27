@@ -1,8 +1,9 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { MAX_ITEM_QUANTITY } from "../hooks/useCart";
+import { maxQuantityOf } from "../hooks/useCart";
 import type { ProductItem } from "../types/shop";
 import { formatPhpCurrency } from "../utils/currency";
+import { isSoldOut, stockLabel } from "../utils/stock";
 
 interface ProductCardProps {
   product: ProductItem;
@@ -21,6 +22,9 @@ export const ProductCard = ({ product, onAddToCart }: ProductCardProps) => {
   const quantityLabel = `Quantity for ${product.name}`;
   const decreaseLabel = `Decrease ${product.name}`;
   const increaseLabel = `Increase ${product.name}`;
+  const soldOut = isSoldOut(product.stock);
+  const stockText = stockLabel(product.stock, "bouquets");
+  const maxQty = maxQuantityOf(product);
 
   const handleAddToCart = (event: MouseEvent<HTMLButtonElement>) => {
     if (!onAddToCart(product, qty)) {
@@ -46,25 +50,33 @@ export const ProductCard = ({ product, onAddToCart }: ProductCardProps) => {
   };
 
   return (
-    <article className="product-card">
+    <article className={`product-card ${soldOut ? "sold-out" : ""}`}>
       <img src={product.image} alt={product.name} />
       <div className="product-card-body">
         <h3>{product.name}</h3>
         {product.description ? <p className="product-description">{product.description}</p> : null}
         <p className="product-price">{formatPhpCurrency(product.pricePhp)}</p>
+        {stockText ? <p className={`stock-note ${soldOut ? "sold-out" : ""}`}>{stockText}</p> : null}
       </div>
       <div className="qty" aria-label={quantityLabel}>
         <button type="button" onClick={() => setQty((prev) => Math.max(prev - 1, 0))} aria-label={decreaseLabel}>-</button>
         <span>{qty}</span>
-        <button type="button" onClick={() => setQty((prev) => Math.min(prev + 1, MAX_ITEM_QUANTITY))} aria-label={increaseLabel}>+</button>
+        <button
+          type="button"
+          onClick={() => setQty((prev) => Math.min(prev + 1, maxQty))}
+          disabled={qty >= maxQty}
+          aria-label={increaseLabel}
+        >
+          +
+        </button>
       </div>
       <button
         type="button"
         className="add-to-cart-btn"
-        disabled={qty === 0}
+        disabled={qty === 0 || soldOut}
         onClick={handleAddToCart}
       >
-        Add to Cart
+        {soldOut ? "Sold Out" : "Add to Cart"}
       </button>
       {flyAnimation
         ? createPortal(

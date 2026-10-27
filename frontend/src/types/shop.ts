@@ -87,7 +87,8 @@ export interface BouquetSelection {
   palette: string;
   wrap: string;
   ribbon: string;
-  flowers: Array<{ code: string; quantity: number }>;
+  /** color is the name of one of the flower's color choices; carts saved before colors existed leave it out. */
+  flowers: Array<{ code: string; quantity: number; color?: string }>;
   fillers: string[];
 }
 
@@ -97,7 +98,7 @@ export interface CustomBouquetSummary {
   palette: string;
   wrap: string;
   ribbon: string;
-  flowers: Array<{ name: string; quantity: number }>;
+  flowers: Array<{ name: string; quantity: number; color?: string | null }>;
   fillers: string[];
 }
 
@@ -106,6 +107,8 @@ export interface ProductItem {
   name: string;
   description?: string;
   pricePhp: number;
+  /** Ready-made bouquets left to order (0 = sold out); missing on custom bouquets. */
+  stock?: number;
   image: string;
   bestSeller?: boolean;
   catalogFilters?: string[];
@@ -171,12 +174,26 @@ export interface OrderPaymentAccount {
   accountNumber: string | null;
 }
 
+/** A color a flower can be ordered in; each flower has exactly one default. */
+export interface FlowerColor {
+  name: string;
+  hex: string;
+  isDefault: boolean;
+}
+
 export interface BuilderOption {
   id: string;
   name: string;
   description: string;
   pricePhp: number;
   colors: string[];
+  /** Flowers only: the colors the customer picks from. */
+  colorChoices: FlowerColor[];
+  /** Wraps only: a photo of how the wrap looks, or null. */
+  imageUrl: string | null;
+  /** Flowers and fillers: units left (stems / bunches); null when the option isn't stock-limited. */
+  stock: number | null;
+  stockUnit: string | null;
 }
 
 export interface BuilderPreview {
@@ -260,7 +277,7 @@ export interface AdminLowStockFlower {
   currentStock: number;
 }
 
-export type AdminOrderStatus = "Pending" | "Ready" | "Completed";
+export type AdminOrderStatus = "Pending" | "Ready" | "Completed" | "Cancelled";
 
 export interface AdminOrder {
   id: string;
@@ -270,6 +287,8 @@ export interface AdminOrder {
   pickupAt: string;
   totalPhp: number;
   status: AdminOrderStatus;
+  /** Why the order was cancelled (shop, customer, rejected payment or no payment); null otherwise. */
+  cancelReason: string | null;
   paymentStatus: PaymentStatus;
 }
 
@@ -296,7 +315,8 @@ export interface OrderItemDetail {
   image: string | null;
   /** fillers is missing on orders placed before fillers existed. */
   customization: { size: string; palette: string; wrap: string; ribbon: string; fillers?: string[] } | null;
-  flowers: Array<{ name: string; quantity: number }>;
+  /** color is null on orders placed before flower colors existed. */
+  flowers: Array<{ name: string; quantity: number; color: string | null }>;
 }
 
 /** An order as its customer sees it in My Orders. */
@@ -310,6 +330,7 @@ export interface CustomerOrder {
   payment: OrderPaymentAccount | null;
   /** The shop's reason when a payment screenshot was rejected. */
   paymentNote: string | null;
+  cancelReason: string | null;
   itemCount: number;
   itemNames: string[];
 }
@@ -393,6 +414,8 @@ export interface AdminProduct {
   name: string;
   description: string;
   pricePhp: number;
+  /** Bouquets left to sell; orders take from it, cancellations return it. */
+  stock: number;
   /** Public-folder path (seeded products) or Cloudinary URL (uploaded); display via resolveImagePath(). */
   imagePath: string;
   bestSeller: boolean;
@@ -410,6 +433,18 @@ export interface AdminBuilderOption extends BuilderOption {
   isDefault: boolean;
 }
 
+/** What the admin can set on a builder option; the API ignores fields that don't apply to the group. */
+export interface BuilderOptionInput {
+  name?: string;
+  description?: string;
+  pricePhp?: number;
+  colors?: string[];
+  colorChoices?: FlowerColor[];
+  imageUrl?: string | null;
+  available?: boolean;
+  isDefault?: boolean;
+}
+
 export type BouquetBuilderSettingTab =
   | "Sizes"
   | "Flower Varieties"
@@ -425,7 +460,7 @@ export interface GeneratedBouquetPreview {
   image: string;
   createdAt: string;
   selection: {
-    flowers: Array<{ name: string; quantity: number }>;
+    flowers: Array<{ name: string; quantity: number; color?: string }>;
     fillers: string[];
     palette: string;
     wrap: string;

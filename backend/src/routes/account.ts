@@ -36,7 +36,7 @@ accountRouter.patch("/", async (req, res) => {
   res.json(await accountResponse(user.id));
 });
 
-// Raw image body (Content-Type: image/jpeg|png|webp, max 2 MB). Replaces the previous photo on Cloudinary.
+// Raw image body (Content-Type: image/jpeg|png|webp, max 3 MB). Replaces the previous photo on Cloudinary.
 accountRouter.post("/avatar", rawImageBody, async (req, res) => {
   const user = currentUser(res);
   const { image, type } = requireUploadedImage(req);

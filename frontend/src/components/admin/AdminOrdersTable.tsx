@@ -4,7 +4,9 @@ import type { AdminOrder, AdminOrderStatus } from "../../types/shop";
 import { PaymentStatusBadge } from "../PaymentStatusBadge";
 import { AdminUiIcon } from "./AdminUi";
 
-export const ORDER_STATUSES: AdminOrderStatus[] = ["Pending", "Ready", "Completed"];
+export const ORDER_STATUSES: AdminOrderStatus[] = ["Pending", "Ready", "Completed", "Cancelled"];
+// Cancelling is its own action (it returns the order's stock), so it isn't offered in the status select.
+const SELECTABLE_STATUSES: AdminOrderStatus[] = ["Pending", "Ready", "Completed"];
 
 // The shop only prepares orders whose payment is verified (or, for older orders, paid on pick-up).
 export const isPaymentSettled = (order: AdminOrder) =>
@@ -16,8 +18,10 @@ interface AdminOrderStatusSelectProps {
   onStatusChange: (orderId: string, status: AdminOrderStatus) => void;
 }
 
-// A status pill that is also the control for changing it.
-export const AdminOrderStatusSelect = ({ order, disabled, onStatusChange }: AdminOrderStatusSelectProps) => (
+// A status pill that is also the control for changing it; cancelled orders can't change.
+export const AdminOrderStatusSelect = ({ order, disabled, onStatusChange }: AdminOrderStatusSelectProps) => order.status === "Cancelled" ? (
+  <span className="admin-ui-status-select status-cancelled" title={order.cancelReason ?? undefined}>Cancelled</span>
+) : (
   <select
     className={`admin-ui-status-select status-${order.status.toLowerCase()}`}
     value={order.status}
@@ -25,7 +29,7 @@ export const AdminOrderStatusSelect = ({ order, disabled, onStatusChange }: Admi
     onChange={(event) => onStatusChange(order.id, event.target.value as AdminOrderStatus)}
     aria-label={`Status of ${order.customerName}'s order`}
   >
-    {ORDER_STATUSES.map((status) => (
+    {SELECTABLE_STATUSES.map((status) => (
       <option value={status} key={status} disabled={status !== "Pending" && !isPaymentSettled(order)}>{status}</option>
     ))}
   </select>

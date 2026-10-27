@@ -27,7 +27,7 @@ interface TimelineRow extends RowDataPacket {
   revenue: number;
 }
 interface StatusRow extends RowDataPacket {
-  status: "Pending" | "Ready" | "Completed";
+  status: "Pending" | "Ready" | "Completed" | "Cancelled";
   orders: number;
 }
 interface TopItemRow extends RowDataPacket {
@@ -87,7 +87,7 @@ const resolveRange = async (range: Range, now: number) => {
 
 const queryTotals = async (from: Date, to: Date) => {
   const [[row]] = await pool.query<TotalsRow[]>(
-    "SELECT COUNT(*) AS orders, SUM(o.total_php) AS revenue FROM orders o WHERE o.created_at >= ? AND o.created_at < ?",
+    "SELECT COUNT(*) AS orders, SUM(o.total_php) AS revenue FROM orders o WHERE o.status <> 'Cancelled' AND o.created_at >= ? AND o.created_at < ?",
     [from, to]
   );
   return { orders: Number(row.orders), revenuePhp: Number(row.revenue ?? 0) };
@@ -109,7 +109,7 @@ adminReportsRouter.get("/reports", async (req, res) => {
     hasPrevious ? queryTotals(new Date(fromMs - (now - fromMs)), from) : Promise.resolve(null),
     pool.query<TimelineRow[]>(
       `SELECT ${BUCKET_SQL[bucket]} AS bucket, COUNT(*) AS orders, SUM(o.total_php) AS revenue
-       FROM orders o WHERE o.created_at >= ? AND o.created_at < ?
+       FROM orders o WHERE o.status <> 'Cancelled' AND o.created_at >= ? AND o.created_at < ?
        GROUP BY bucket ORDER BY bucket`,
       window
     ),
@@ -120,7 +120,7 @@ adminReportsRouter.get("/reports", async (req, res) => {
     pool.query<TotalsRow[]>(
       `SELECT COUNT(*) AS orders, SUM(oi.unit_price_php * oi.quantity) AS revenue
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
-       WHERE oi.customization IS NOT NULL AND o.created_at >= ? AND o.created_at < ?`,
+       WHERE oi.customization IS NOT NULL AND o.status <> 'Cancelled' AND o.created_at >= ? AND o.created_at < ?`,
       window
     ),
     pool.query<TopItemRow[]>(
@@ -128,7 +128,7 @@ adminReportsRouter.get("/reports", async (req, res) => {
                    ELSE CONCAT('Custom bouquet · ', JSON_UNQUOTE(JSON_EXTRACT(oi.customization, '$.size'))) END AS name,
               SUM(oi.quantity) AS quantity, SUM(oi.unit_price_php * oi.quantity) AS revenue
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
-       WHERE o.created_at >= ? AND o.created_at < ?
+       WHERE o.status <> 'Cancelled' AND o.created_at >= ? AND o.created_at < ?
        GROUP BY name ORDER BY revenue DESC, name LIMIT 5`,
       window
     ),
@@ -138,7 +138,7 @@ adminReportsRouter.get("/reports", async (req, res) => {
        FROM order_item_flowers f
        JOIN order_items oi ON oi.id = f.order_item_id
        JOIN orders o ON o.id = oi.order_id
-       WHERE o.created_at >= ? AND o.created_at < ?
+       WHERE o.status <> 'Cancelled' AND o.created_at >= ? AND o.created_at < ?
        GROUP BY f.flower_code, f.flower_name ORDER BY stems DESC, name LIMIT 6`,
       window
     )
@@ -153,7 +153,7 @@ adminReportsRouter.get("/reports", async (req, res) => {
     timeline.push({ start: key, orders: Number(row?.orders ?? 0), revenuePhp: Number(row?.revenue ?? 0) });
   }
 
-  const statusCounts = { Pending: 0, Ready: 0, Completed: 0 };
+  const statusCounts = { Pending: 0, Ready: 0, Completed: 0, Cancelled: 0 };
   statusRows.forEach((row) => {
     statusCounts[row.status] = Number(row.orders);
   });

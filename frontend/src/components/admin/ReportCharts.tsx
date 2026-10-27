@@ -136,7 +136,7 @@ export const RevenueColumnChart = ({ timeline, bucket }: RevenueChartProps) => {
   );
 };
 
-const STATUS_ORDER: AdminOrderStatus[] = ["Pending", "Ready", "Completed"];
+const STATUS_ORDER: AdminOrderStatus[] = ["Pending", "Ready", "Completed", "Cancelled"];
 
 // Part-to-whole: one 100% stacked bar plus a labelled legend (counts and shares always visible).
 export const StatusBreakdown = ({ counts }: { counts: AdminReports["statusCounts"] }) => {
