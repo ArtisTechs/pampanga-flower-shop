@@ -366,7 +366,8 @@ export interface AdminReports {
 
 export interface InventoryItem {
   id: string;
-  kind: "flower" | "add-on";
+  /** "product" = a ready-made bouquet; it has no storage limit, so capacity only scales the level bar. */
+  kind: "flower" | "add-on" | "product";
   name: string;
   description: string;
   threshold: number;

@@ -185,7 +185,13 @@ export const uploadPaymentQr = async (file: File) =>
 
 export const fetchInventory = () => apiRequest<InventoryItem[]>("/admin/inventory");
 
-export const adjustInventory = (itemId: string, delta: number) =>
+export const adjustInventory = (item: InventoryItem, delta: number) =>
+  item.kind === "product" ? adjustProductStock(item.id, delta) : adjustInventoryItem(item.id, delta);
+
+const adjustProductStock = (productId: string, delta: number) =>
+  apiRequest<InventoryItem>(`/admin/inventory/products/${encodeURIComponent(productId)}/adjust`, { method: "POST", body: { delta } });
+
+const adjustInventoryItem = (itemId: string, delta: number) =>
   apiRequest<InventoryItem>(`/admin/inventory/${encodeURIComponent(itemId)}/adjust`, { method: "POST", body: { delta } });
 
 export const fetchAdminUsers = () => apiRequest<AdminUser[]>("/admin/users");

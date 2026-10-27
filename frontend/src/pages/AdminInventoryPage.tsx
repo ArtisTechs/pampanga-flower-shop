@@ -9,12 +9,17 @@ import { AdminPageHeader, AdminSegments, AdminUiIcon } from "../components/admin
 import { useApiData } from "../hooks/useApiData";
 import type { Account, InventoryItem } from "../types/shop";
 
-type InventoryTab = "Flowers" | "Add-ons";
+type InventoryTab = "Flowers" | "Add-ons" | "Bouquets";
 type StockFilter = "all" | "low" | "healthy";
 type SortBy = "name" | "stock-asc" | "stock-desc";
 
-const tabKinds: Record<InventoryTab, InventoryItem["kind"]> = { Flowers: "flower", "Add-ons": "add-on" };
+const INVENTORY_TABS = ["Flowers", "Add-ons", "Bouquets"] as const;
+const tabKinds: Record<InventoryTab, InventoryItem["kind"]> = { Flowers: "flower", "Add-ons": "add-on", Bouquets: "product" };
 const isLowStock = (item: InventoryItem) => item.inStock <= item.threshold;
+// Product ids and supply ids are separate, so rows are keyed by both.
+const itemKey = (item: InventoryItem) => `${item.kind}:${item.id}`;
+// Bouquets have no storage limit; supplies stop at their capacity.
+const isFull = (item: InventoryItem) => item.kind !== "product" && item.inStock >= item.capacity;
 
 interface AdminInventoryPageProps {
   account: Account;
@@ -36,7 +41,8 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
 
   const tabCounts = {
     Flowers: allItems.filter((item) => item.kind === "flower").length,
-    "Add-ons": allItems.filter((item) => item.kind === "add-on").length
+    "Add-ons": allItems.filter((item) => item.kind === "add-on").length,
+    Bouquets: allItems.filter((item) => item.kind === "product").length
   };
   const lowCount = allItems.filter(isLowStock).length;
 
@@ -58,17 +64,18 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
   }, [activeTab, allItems, search, sortBy, stockFilter]);
 
   const handleAdjust = async (item: InventoryItem, direction: 1 | -1) => {
-    const amount = Number(amounts[item.id] ?? "10");
+    const amount = Number(amounts[itemKey(item)] ?? "10");
     if (!Number.isInteger(amount) || amount <= 0) {
       onToast("Enter a whole number above 0.", "error");
       return;
     }
 
-    setUpdatingItemId(item.id);
+    setUpdatingItemId(itemKey(item));
     try {
-      const updatedItem = await adjustInventory(item.id, amount * direction);
-      inventory.updateData((current) => current.map((entry) => (entry.id === item.id ? updatedItem : entry)));
-      const capped = direction === 1 && updatedItem.inStock === updatedItem.capacity && item.inStock + amount > item.capacity;
+      const updatedItem = await adjustInventory(item, amount * direction);
+      inventory.updateData((current) => current.map((entry) => (itemKey(entry) === itemKey(item) ? updatedItem : entry)));
+      const capped = direction === 1 && item.kind !== "product"
+        && updatedItem.inStock === updatedItem.capacity && item.inStock + amount > item.capacity;
       onToast(
         `${updatedItem.name}: ${updatedItem.inStock} ${updatedItem.unit} in stock${capped ? " (storage is full)" : ""}.`,
         "success"
@@ -86,14 +93,14 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
         <AdminPageHeader
           title="Inventory"
           subtitle={inventory.data
-            ? `${tabCounts.Flowers} flowers · ${tabCounts["Add-ons"]} add-ons · ${lowCount === 0 ? "everything is stocked" : `${lowCount} need restocking`}`
-            : "Track flower stems and add-on supplies"}
+            ? `${tabCounts.Flowers} flowers · ${tabCounts["Add-ons"]} add-ons · ${tabCounts.Bouquets} bouquets · ${lowCount === 0 ? "everything is stocked" : `${lowCount} need restocking`}`
+            : "Track flower stems, add-on supplies and ready-made bouquets"}
         />
 
         <section className="admin-products-toolbar admin-ui-toolbar-inventory" aria-label="Filter inventory">
           <AdminSegments
             label="Inventory type"
-            options={["Flowers", "Add-ons"] as const}
+            options={INVENTORY_TABS}
             value={activeTab}
             onChange={setActiveTab}
             counts={inventory.data ? tabCounts : undefined}
@@ -132,10 +139,10 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
             {visibleItems.map((item) => {
               const low = isLowStock(item);
               const fillPercent = Math.max(0, Math.min(100, (item.inStock / item.capacity) * 100));
-              const isUpdating = updatingItemId === item.id;
+              const isUpdating = updatingItemId === itemKey(item);
 
               return (
-                <li key={item.id} className={low ? "is-low" : ""}>
+                <li key={itemKey(item)} className={low ? "is-low" : ""}>
                   <div className="admin-ui-inventory-info">
                     <h3>
                       {item.name}
@@ -145,7 +152,9 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
                   </div>
                   <div className="admin-ui-inventory-level">
                     <div className="admin-ui-level-text">
-                      <strong>{item.inStock}</strong> / {item.capacity} {item.unit}
+                      {item.kind === "product"
+                        ? <><strong>{item.inStock}</strong> {item.unit}</>
+                        : <><strong>{item.inStock}</strong> / {item.capacity} {item.unit}</>}
                       <span className="admin-ui-muted">Restock at {item.threshold}</span>
                     </div>
                     <div className="admin-ui-level-bar" role="meter" aria-valuemin={0} aria-valuemax={item.capacity} aria-valuenow={item.inStock} aria-label={`${item.name} stock level`}>
@@ -167,15 +176,15 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
                       min="1"
                       step="1"
                       inputMode="numeric"
-                      value={amounts[item.id] ?? "10"}
-                      onChange={(event) => setAmounts((current) => ({ ...current, [item.id]: event.target.value }))}
+                      value={amounts[itemKey(item)] ?? "10"}
+                      onChange={(event) => setAmounts((current) => ({ ...current, [itemKey(item)]: event.target.value }))}
                       aria-label={`Amount to adjust for ${item.name}`}
                     />
                     <button
                       type="button"
                       className="add"
                       onClick={() => handleAdjust(item, 1)}
-                      disabled={isUpdating || item.inStock >= item.capacity}
+                      disabled={isUpdating || isFull(item)}
                       aria-label={`Add stock to ${item.name}`}
                     >
                       <AdminUiIcon name="plus" />
