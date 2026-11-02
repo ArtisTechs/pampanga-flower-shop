@@ -17,6 +17,8 @@ INSERT IGNORE INTO builder_options (id, option_group, code, name, description, p
   ('filler-babys-breath', 'filler', 'babys-breath', 'Baby''s Breath', 'Clouds of tiny white flowers for a light, airy finish.', 30, '["#f7f5ef"]', 3),
   ('filler-goldenrod', 'filler', 'goldenrod', 'Goldenrod', 'Feathery golden sprays that brighten the arrangement.', 30, '["#e2b52c"]', 4),
   ('filler-assorted-mums', 'filler', 'assorted-mums', 'Assorted Mums', 'Small mixed chrysanthemums that fill out the bouquet.', 30, '["#f2d64b", "#f7f2e8", "#c77dc7"]', 5),
+  ('filler-eucalyptus', 'filler', 'eucalyptus', 'Eucalyptus', 'Soft silvery-green leaves that add a fresh, natural touch.', 30, '["#8fae9a"]', 6),
+  ('filler-statice-white', 'filler', 'statice-white', 'Statice White', 'Papery white sprays that give a delicate, textured finish.', 30, '["#f4f1ea"]', 7),
 
   ('palette-red', 'palette', 'red', 'Red', 'Bold, passionate reds for classic romantic bouquets.', 0, '["#c91f1f", "#e43b31", "#ff4b36"]', 1),
   ('palette-blush', 'palette', 'blush', 'Blush', 'Gentle pink shades for a sweet and elegant bouquet.', 0, '["#e87072", "#f5988c", "#f6d5ce"]', 2),

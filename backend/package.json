@@ -15,6 +15,7 @@
     "seed": "tsx src/db/seed.ts",
     "db:setup": "npm run migrate && npm run seed",
     "images:migrate": "tsx src/db/migrateImagesToCloudinary.ts",
+    "combinations:import": "tsx src/db/importCombinationPhotos.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

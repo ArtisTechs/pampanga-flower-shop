@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import {
   describeSelection,
+  findCombinationPhoto,
   findGeneratedPreview,
   saveGeneratedPreview,
   selectionKey,
@@ -360,6 +361,12 @@ const generateAndStore = async (key: string, selection: BouquetSelection, previe
 
 // The cached image for this exact selection, generating (and caching) it only when there is none yet.
 export const getOrCreatePreview = async (selection: BouquetSelection, previews: BuilderPreview[], userId: string) => {
+  // The shop's own photo wins; only selections without one are generated.
+  const photo = await findCombinationPhoto(selection);
+  if (photo) {
+    return { image: photo, generated: false };
+  }
+
   const key = selectionKey(selection);
   const cached = await findGeneratedPreview(key);
   if (cached) {

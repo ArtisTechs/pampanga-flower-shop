@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { RowDataPacket } from "mysql2";
 import { HttpError } from "../middleware/errorHandler.js";
+import { combinationKey } from "../utils/combinationKey.js";
 import { isRecord, requireInt } from "../utils/validate.js";
 import { pool } from "./pool.js";
 
@@ -38,6 +39,10 @@ interface GeneratedPreviewRow extends RowDataPacket {
   selection: GeneratedPreviewSelection;
   image_url: string;
   created_at: Date;
+}
+
+interface CombinationPhotoRow extends RowDataPacket {
+  image_url: string;
 }
 
 interface BuilderPreviewRow extends RowDataPacket {
@@ -224,6 +229,27 @@ export const describeSelection = (selection: BouquetSelection): GeneratedPreview
   wrap: selection.wrap.name,
   ribbon: selection.ribbon.name
 });
+
+// The real combination photos show one wrapping: Korean paper with a satin ribbon.
+export const PHOTO_WRAP_CODE = "korean";
+export const PHOTO_RIBBON_CODE = "satin";
+
+// The shop's own photo of this selection, if there is one (only for the wrap and ribbon the photos show).
+export const findCombinationPhoto = async (selection: BouquetSelection) => {
+  if (selection.wrap.code !== PHOTO_WRAP_CODE || selection.ribbon.code !== PHOTO_RIBBON_CODE) {
+    return null;
+  }
+  const key = combinationKey({
+    flowers: selection.flowers.map(({ option, color, quantity }) => ({ code: option.code, color: color.name, quantity })),
+    fillers: selection.fillers.map((filler) => filler.code),
+    palette: selection.palette.code
+  });
+  const [rows] = await pool.query<CombinationPhotoRow[]>(
+    "SELECT image_url FROM builder_combination_photos WHERE combination_key = ?",
+    [key]
+  );
+  return rows[0]?.image_url ?? null;
+};
 
 export const findGeneratedPreview = async (key: string) => {
   const [rows] = await pool.query<GeneratedPreviewRow[]>(
