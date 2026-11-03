@@ -1324,8 +1324,18 @@ a.profile-menu-item { display: block; text-decoration: none; }
   border-radius: 10px;
   background: #ffcaca;
 }
-.flower-choice:nth-child(4) {
-  grid-column: 2 / span 2;
+/* Three cards a row on desktop; whatever is left in the last row (two cards or one) is centered, for any number of
+   flowers or fillers. Smaller screens set their own columns below. */
+@media (min-width: 1025px) {
+  .flower-choice:nth-last-child(2):nth-child(3n + 1) {
+    grid-column: 2 / span 2;
+  }
+  .flower-choice:last-child:nth-child(3n + 2) {
+    grid-column: 4 / span 2;
+  }
+  .flower-choice:last-child:nth-child(3n + 1) {
+    grid-column: 3 / span 2;
+  }
 }
 .flower-dot {
   width: 28px;
@@ -5593,6 +5603,31 @@ button.admin-builder-availability:disabled {
     grid-column: 2 / -1;
     justify-self: start;
   }
+}
+
+/* Combination photo editor: fillers as a wrapping row of checkboxes. */
+.admin-builder-filler-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-bottom: 8px;
+}
+.admin-builder-filler-list label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ap-text);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.admin-shell .admin-builder-filler-list input[type="checkbox"] {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--ap-accent-strong);
 }
 
 /* Combination photo editor: flower, color and stem count on one row. */
