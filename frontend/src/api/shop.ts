@@ -190,6 +190,9 @@ export const fetchInventory = () => apiRequest<InventoryItem[]>("/admin/inventor
 export const adjustInventory = (item: InventoryItem, delta: number, color?: string) =>
   item.kind === "product" ? adjustProductStock(item.id, delta) : adjustInventoryItem(item.id, delta, color);
 
+export const updateInventoryLimits = (itemId: string, limits: { capacity: number; threshold: number }) =>
+  apiRequest<InventoryItem>(`/admin/inventory/${encodeURIComponent(itemId)}`, { method: "PATCH", body: limits });
+
 const adjustProductStock = (productId: string, delta: number) =>
   apiRequest<InventoryItem>(`/admin/inventory/products/${encodeURIComponent(productId)}/adjust`, { method: "POST", body: { delta } });
 

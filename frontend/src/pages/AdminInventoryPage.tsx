@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { errorMessage } from "../api/client";
-import { adjustInventory, fetchInventory } from "../api/shop";
+import { adjustInventory, fetchInventory, updateInventoryLimits } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
 import { LoadState } from "../components/LoadState";
 import { AdminLayout } from "../components/admin/AdminLayout";
@@ -36,6 +36,8 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
+  // The supply whose maximum stock / restock level is being edited, with the typed values.
+  const [limitsDraft, setLimitsDraft] = useState<{ key: string; capacity: string; threshold: string } | null>(null);
   const inventory = useApiData(fetchInventory, []);
   const allItems = useMemo(() => inventory.data ?? [], [inventory.data]);
 
@@ -85,6 +87,30 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
           : `${updatedItem.name}: ${updatedItem.inStock} ${updatedItem.unit} in stock${capped ? " (storage is full)" : ""}.`,
         "success"
       );
+    } catch (error) {
+      onToast(errorMessage(error), "error");
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
+  const handleSaveLimits = async (item: InventoryItem) => {
+    if (!limitsDraft) {
+      return;
+    }
+    const capacity = Number(limitsDraft.capacity);
+    const threshold = Number(limitsDraft.threshold);
+    if (!Number.isInteger(capacity) || capacity < 1 || !Number.isInteger(threshold) || threshold < 0) {
+      onToast("Enter whole numbers: maximum stock of 1 or more and a restock level of 0 or more.", "error");
+      return;
+    }
+
+    setUpdatingItemId(itemKey(item));
+    try {
+      const updatedItem = await updateInventoryLimits(item.id, { capacity, threshold });
+      inventory.updateData((current) => current.map((entry) => (itemKey(entry) === itemKey(item) ? updatedItem : entry)));
+      setLimitsDraft(null);
+      onToast(`${updatedItem.name}: maximum ${updatedItem.capacity} ${updatedItem.unit}, restock at ${updatedItem.threshold}.`, "success");
     } catch (error) {
       onToast(errorMessage(error), "error");
     } finally {
@@ -161,7 +187,43 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
                         ? <><strong>{item.inStock}</strong> {item.unit}</>
                         : <><strong>{item.inStock}</strong> / {item.capacity} {item.unit}</>}
                       <span className="admin-ui-muted">Restock at {item.threshold}</span>
+                      {item.kind !== "product" ? (
+                        <button
+                          type="button"
+                          className="admin-ui-limits-edit"
+                          onClick={() => setLimitsDraft({ key: itemKey(item), capacity: String(item.capacity), threshold: String(item.threshold) })}
+                          aria-label={`Edit maximum stock of ${item.name}`}
+                        >
+                          <AdminUiIcon name="edit" /> Edit max
+                        </button>
+                      ) : null}
                     </div>
+                    {limitsDraft?.key === itemKey(item) ? (
+                      <form
+                        className="admin-ui-limits-form"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void handleSaveLimits(item);
+                        }}
+                      >
+                        <label>
+                          Maximum stock
+                          <input
+                            type="number" min="1" step="1" inputMode="numeric" value={limitsDraft.capacity}
+                            onChange={(event) => setLimitsDraft({ ...limitsDraft, capacity: event.target.value })}
+                          />
+                        </label>
+                        <label>
+                          Restock at
+                          <input
+                            type="number" min="0" step="1" inputMode="numeric" value={limitsDraft.threshold}
+                            onChange={(event) => setLimitsDraft({ ...limitsDraft, threshold: event.target.value })}
+                          />
+                        </label>
+                        <button type="submit" disabled={updatingItemId === itemKey(item)}>Save</button>
+                        <button type="button" onClick={() => setLimitsDraft(null)}>Cancel</button>
+                      </form>
+                    ) : null}
                     <div className="admin-ui-level-bar" role="meter" aria-valuemin={0} aria-valuemax={item.capacity} aria-valuenow={item.inStock} aria-label={`${item.name} stock level`}>
                       <span style={{ width: `${fillPercent}%` }} />
                       <i style={{ left: `${Math.min(100, (item.threshold / item.capacity) * 100)}%` }} aria-hidden="true" />

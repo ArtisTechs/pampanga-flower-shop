@@ -109,6 +109,27 @@ adminInventoryRouter.post("/inventory/products/:id/adjust", async (req, res) => 
   res.json(toInventoryItem(rows[0]));
 });
 
+const MAX_CAPACITY = 100_000;
+
+// Body: { capacity, threshold } - the most the shop stores of this supply (the level bar's end) and the stock at or
+// below which it counts as low. Capacity can't go under what is in stock now.
+adminInventoryRouter.patch("/inventory/:id", async (req, res) => {
+  const id = requireId(req.params.id, "inventory item");
+  const body = bodyOf(req);
+  const capacity = requireInt(body.capacity, "Maximum stock", 1, MAX_CAPACITY);
+  const threshold = requireInt(body.threshold, "Restock level", 0, capacity);
+  const [[item]] = await pool.query<RowDataPacket[]>("SELECT current_stock FROM inventory_items WHERE id = ?", [id]);
+  if (!item) {
+    throw new HttpError(404, "Inventory item not found");
+  }
+  if (capacity < Number(item.current_stock)) {
+    throw new HttpError(400, `Maximum stock can't be below the ${item.current_stock} currently in stock`);
+  }
+  await pool.query("UPDATE inventory_items SET capacity = ?, threshold = ? WHERE id = ?", [capacity, threshold, id]);
+  const [rows] = await pool.query<InventoryRow[]>(`${INVENTORY_SELECT} WHERE id = ?`, [id]);
+  res.json(toInventoryItem(rows[0], (await loadColors([id])).get(id)));
+});
+
 // Adds or removes stock; the result is clamped to 0..capacity in a single atomic UPDATE. A flower counted per
 // color needs a body.color: only that color changes, and the flower's total follows (capped at capacity).
 adminInventoryRouter.post("/inventory/:id/adjust", async (req, res) => {
