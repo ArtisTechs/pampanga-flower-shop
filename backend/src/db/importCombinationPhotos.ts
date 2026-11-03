@@ -24,6 +24,8 @@ const argValue = (name: string) => {
 const isApply = process.argv.includes("--apply");
 const manifestFile = argValue("--manifest");
 const planFile = argValue("--plan") ?? "combinations-plan.json";
+// --drop a.jfif,b.jpe: photo file names to leave out, e.g. the extra photo in a folder that has seven.
+const dropped = new Set((argValue("--drop") ?? "").split(",").map((name) => name.trim()).filter(Boolean));
 
 interface ManifestFile {
   path: string;
@@ -313,6 +315,7 @@ const run = async () => {
   }
   // PowerShell writes the manifest with a byte-order mark.
   const manifest = JSON.parse((await readFile(manifestFile, "utf8")).replace(/^﻿/, "")) as { root: string; files: ManifestFile[] };
+  manifest.files = manifest.files.filter((file) => !dropped.has(path.basename(file.path)));
   const { plan, issues } = buildPlan(manifest.files);
 
   console.log(`${manifest.files.length} photos in ${new Set(manifest.files.map((file) => file.path.split("/").slice(0, -1).join("/"))).size} folders`);

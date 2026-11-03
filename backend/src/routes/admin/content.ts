@@ -3,6 +3,7 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import { config } from "../../config.js";
 import {
   BUILDER_GROUPS,
+  listCombinationPhotos,
   listGeneratedPreviews,
   loadBuilderOptions,
   STOCKED_GROUPS,
@@ -279,6 +280,52 @@ adminContentRouter.post("/uploads/builder-image", rawImageBody, async (req, res)
 // AI-generated customizer previews, newest first, so the admin can check them.
 adminContentRouter.get("/builder-previews", async (_req, res) => {
   res.json(await listGeneratedPreviews());
+});
+
+// The shop's own combination photos (shown instead of an AI preview for Korean wrap + satin ribbon).
+adminContentRouter.get("/combination-photos", async (_req, res) => {
+  res.json(await listCombinationPhotos());
+});
+
+const requireCombinationKey = (value: string | string[]) => {
+  if (typeof value !== "string" || !/^[0-9a-f]{40}$/.test(value)) {
+    throw new HttpError(400, "Invalid combination photo");
+  }
+  return value;
+};
+
+// Raw image body (JPEG, PNG or WebP, max 3 MB) replaces the photo for this combination. It keeps its Cloudinary id,
+// so the old image is overwritten; the new URL carries a new version.
+adminContentRouter.put("/combination-photos/:key/image", rawImageBody, async (req, res) => {
+  const key = requireCombinationKey(req.params.key);
+  const [existing] = await pool.query<RowDataPacket[]>(
+    "SELECT combination_key FROM builder_combination_photos WHERE combination_key = ?",
+    [key]
+  );
+  if (existing.length === 0) {
+    throw new HttpError(404, "Combination photo not found");
+  }
+  const { image, type } = requireUploadedImage(req);
+  const { url } = await uploadImage(image, type, {
+    publicId: `${config.cloudinary.builderCombinationFolder}/${key}`,
+    replace: true
+  });
+  await pool.query("UPDATE builder_combination_photos SET image_url = ?, source_path = ? WHERE combination_key = ?", [
+    url,
+    "uploaded in the admin",
+    key
+  ]);
+  res.json({ key, image: url });
+});
+
+// Removes the photo; customers choosing this combination get a generated preview again.
+adminContentRouter.delete("/combination-photos/:key", async (req, res) => {
+  const key = requireCombinationKey(req.params.key);
+  const [result] = await pool.query<ResultSetHeader>("DELETE FROM builder_combination_photos WHERE combination_key = ?", [key]);
+  if (result.affectedRows === 0) {
+    throw new HttpError(404, "Combination photo not found");
+  }
+  res.status(204).end();
 });
 
 // Removes a preview from the cache; the next customer with that selection gets a freshly generated image.

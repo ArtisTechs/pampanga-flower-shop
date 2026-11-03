@@ -5,12 +5,14 @@ import {
   deleteBuilderOption,
   deleteGeneratedPreview,
   fetchBuilderOptions,
+  fetchCombinationPhotos,
   fetchGeneratedPreviews,
   updateBuilderOption,
   uploadBuilderImage
 } from "../api/shop";
 import type { ToastTone } from "../components/AppToast";
 import { LoadState } from "../components/LoadState";
+import { AdminCombinationPhotos } from "../components/admin/AdminCombinationPhotos";
 import { AdminLayout } from "../components/admin/AdminLayout";
 import { AdminDialog, AdminPageHeader, AdminSegments, AdminUiIcon as Icon } from "../components/admin/AdminUi";
 import { useApiData } from "../hooks/useApiData";
@@ -28,7 +30,7 @@ import { resolveImagePath } from "../utils/assets";
 import { formatPhpCurrency } from "../utils/currency";
 import { IMAGE_UPLOAD_TYPES, validateImageFile } from "../utils/validation";
 
-type OptionTab = Exclude<BouquetBuilderSettingTab, "AI Previews">;
+type OptionTab = Exclude<BouquetBuilderSettingTab, "Photos" | "AI Previews">;
 
 const tabGroups: Record<OptionTab, BuilderOptionGroup> = {
   Sizes: "size",
@@ -39,7 +41,7 @@ const tabGroups: Record<OptionTab, BuilderOptionGroup> = {
   "Ribbon Design": "ribbon"
 };
 const optionTabs = Object.keys(tabGroups) as OptionTab[];
-const tabs: BouquetBuilderSettingTab[] = [...optionTabs, "AI Previews"];
+const tabs: BouquetBuilderSettingTab[] = [...optionTabs, "Photos", "AI Previews"];
 
 const groupLabels: Record<BuilderOptionGroup, string> = {
   size: "size",
@@ -143,9 +145,11 @@ export const AdminBouquetBuilderPage = ({ account, onLogout, onToast }: AdminBou
   const [deleting, setDeleting] = useState<AdminBuilderOption | null>(null);
   const options = useApiData(fetchBuilderOptions, []);
   const previews = useApiData(fetchGeneratedPreviews, []);
+  const combinationPhotos = useApiData(fetchCombinationPhotos, []);
   const allOptions = options.data ?? [];
   const isPreviewTab = activeTab === "AI Previews";
-  const activeGroup = isPreviewTab ? null : tabGroups[activeTab];
+  const isPhotoTab = activeTab === "Photos";
+  const activeGroup = isPreviewTab || isPhotoTab ? null : tabGroups[activeTab];
   const settings = activeGroup ? allOptions.filter((option) => option.group === activeGroup) : [];
   const liveCounts: Partial<Record<BouquetBuilderSettingTab, number>> = {
     ...(options.data
@@ -153,6 +157,7 @@ export const AdminBouquetBuilderPage = ({ account, onLogout, onToast }: AdminBou
           optionTabs.map((tab) => [tab, allOptions.filter((option) => option.group === tabGroups[tab] && option.available).length])
         )
       : {}),
+    ...(combinationPhotos.data ? { Photos: combinationPhotos.data.length } : {}),
     ...(previews.data ? { "AI Previews": previews.data.length } : {})
   };
 
@@ -258,7 +263,9 @@ export const AdminBouquetBuilderPage = ({ account, onLogout, onToast }: AdminBou
           />
         </section>
 
-        {isPreviewTab ? (
+        {isPhotoTab ? (
+          <AdminCombinationPhotos photos={combinationPhotos} options={allOptions} onToast={onToast} />
+        ) : isPreviewTab ? (
           !previews.data ? (
             <LoadState error={previews.error} onRetry={previews.reload} />
           ) : (

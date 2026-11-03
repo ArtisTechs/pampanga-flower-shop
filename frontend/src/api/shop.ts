@@ -18,6 +18,7 @@ import type {
   CatalogListing,
   CustomerOrder,
   CustomerOrderDetail,
+  CombinationPhoto,
   GeneratedBouquetPreview,
   HomeContent,
   InventoryItem,
@@ -228,6 +229,15 @@ export const fetchGeneratedPreviews = async () =>
 
 export const deleteGeneratedPreview = (key: string) =>
   apiRequest<void>(`/admin/builder-previews/${encodeURIComponent(key)}`, { method: "DELETE" });
+
+export const fetchCombinationPhotos = () => apiRequest<CombinationPhoto[]>("/admin/combination-photos");
+
+// Replaces the photo (JPG, PNG, or WebP, max 3 MB); returns the new image URL.
+export const replaceCombinationPhoto = async (key: string, file: File) =>
+  (await apiRequest<{ image: string }>(`/admin/combination-photos/${encodeURIComponent(key)}/image`, { method: "PUT", body: file })).image;
+
+export const deleteCombinationPhoto = (key: string) =>
+  apiRequest<void>(`/admin/combination-photos/${encodeURIComponent(key)}`, { method: "DELETE" });
 
 export const fetchAdminProducts = () => apiRequest<AdminProduct[]>("/admin/products");
 

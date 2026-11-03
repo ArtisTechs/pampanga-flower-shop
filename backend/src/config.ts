@@ -30,7 +30,9 @@ export const config = {
     paymentQrFolder: process.env.CLOUDINARY_PAYMENT_QR_FOLDER ?? "pampanga-flower-shop/payment-qr",
     paymentProofFolder: process.env.CLOUDINARY_PAYMENT_PROOF_FOLDER ?? "pampanga-flower-shop/payment-proofs",
     builderPreviewFolder: process.env.CLOUDINARY_BUILDER_PREVIEW_FOLDER ?? "pampanga-flower-shop/catalog/customize-previews/generated",
-    builderOptionFolder: process.env.CLOUDINARY_BUILDER_OPTION_FOLDER ?? "pampanga-flower-shop/catalog/builder-options"
+    builderOptionFolder: process.env.CLOUDINARY_BUILDER_OPTION_FOLDER ?? "pampanga-flower-shop/catalog/builder-options",
+    // The shop's own combination photos, one asset per combination key (see db/importCombinationPhotos.ts).
+    builderCombinationFolder: process.env.CLOUDINARY_BUILDER_COMBINATION_FOLDER ?? "pampanga-flower-shop/builder/combinations"
   },
   // Optional: customizer preview images. Without the chosen provider's credentials, the customizer shows the
   // closest stock preview instead.

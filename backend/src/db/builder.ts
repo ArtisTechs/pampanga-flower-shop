@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { RowDataPacket } from "mysql2";
 import { HttpError } from "../middleware/errorHandler.js";
-import { combinationKey } from "../utils/combinationKey.js";
+import { combinationKey, type CombinationSpec } from "../utils/combinationKey.js";
 import { isRecord, requireInt } from "../utils/validate.js";
 import { pool } from "./pool.js";
 
@@ -249,6 +249,27 @@ export const findCombinationPhoto = async (selection: BouquetSelection) => {
     [key]
   );
   return rows[0]?.image_url ?? null;
+};
+
+interface CombinationPhotoListRow extends CombinationPhotoRow {
+  combination_key: string;
+  selection: CombinationSpec;
+  created_at: Date;
+}
+
+// Every combination photo for the admin to check and manage, in the order they were added.
+export const listCombinationPhotos = async () => {
+  const [rows] = await pool.query<CombinationPhotoListRow[]>(
+    `SELECT combination_key, selection, image_url, created_at
+     FROM builder_combination_photos
+     ORDER BY created_at, combination_key`
+  );
+  return rows.map((row) => ({
+    key: row.combination_key,
+    selection: row.selection,
+    image: row.image_url,
+    createdAt: row.created_at.toISOString()
+  }));
 };
 
 export const findGeneratedPreview = async (key: string) => {
