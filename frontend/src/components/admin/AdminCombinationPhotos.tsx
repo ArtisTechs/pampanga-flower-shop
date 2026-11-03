@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
-import { errorMessage } from "../../api/client";
+import { ApiError, errorMessage } from "../../api/client";
 import { deleteCombinationPhoto, replaceCombinationPhoto, updateCombinationPhoto } from "../../api/shop";
 import type { AdminBuilderOption, CombinationPhoto, CombinationPhotoSelection } from "../../types/shop";
 import { resolveImagePath } from "../../utils/assets";
@@ -131,10 +131,15 @@ export const AdminCombinationPhotos = ({ photos, options, onToast }: AdminCombin
     }
   };
 
-  const handleEdited = (photo: CombinationPhoto, saved: { key: string; selection: CombinationPhotoSelection }) => {
-    photos.updateData((current) =>
-      current.map((entry) => (entry.key === photo.key ? { ...entry, key: saved.key, selection: saved.selection } : entry))
-    );
+  // After a swap or replace other photos changed too, so the list is loaded again.
+  const handleEdited = (photo: CombinationPhoto, saved: { key: string; selection: CombinationPhotoSelection }, changedOthers: boolean) => {
+    if (changedOthers) {
+      photos.reload();
+    } else {
+      photos.updateData((current) =>
+        current.map((entry) => (entry.key === photo.key ? { ...entry, key: saved.key, selection: saved.selection } : entry))
+      );
+    }
     setEditing(null);
     onToast("Photo updated. It now shows for the bouquet you chose.", "success");
   };
@@ -222,9 +227,10 @@ export const AdminCombinationPhotos = ({ photos, options, onToast }: AdminCombin
       {editing ? (
         <CombinationPhotoEditDialog
           photo={editing}
+          allPhotos={photos.data}
           options={options}
           onClose={() => setEditing(null)}
-          onSaved={(saved) => handleEdited(editing, saved)}
+          onSaved={(saved, changedOthers) => handleEdited(editing, saved, changedOthers)}
         />
       ) : null}
 
@@ -264,15 +270,23 @@ interface FlowerRow {
   quantity: string;
 }
 
+// The same bouquet however it was entered: repeated flower and color rows added together, order ignored.
+const bouquetSignature = ({ flowers, fillers, palette }: CombinationPhotoSelection) => {
+  const stems = new Map<string, number>();
+  flowers.forEach(({ code, color, quantity }) => stems.set(`${code}|${color}`, (stems.get(`${code}|${color}`) ?? 0) + quantity));
+  return JSON.stringify([[...stems].sort(([first], [second]) => first.localeCompare(second)), [...new Set(fillers)].sort(), palette]);
+};
+
 interface CombinationPhotoEditDialogProps {
   photo: CombinationPhoto;
+  allPhotos: CombinationPhoto[];
   options: AdminBuilderOption[];
   onClose: () => void;
-  onSaved: (saved: { key: string; selection: CombinationPhotoSelection }) => void;
+  onSaved: (saved: { key: string; selection: CombinationPhotoSelection }, changedOthers: boolean) => void;
 }
 
 // Which bouquet the photo is for: its flowers (each with a color and count), fillers and color palette.
-const CombinationPhotoEditDialog = ({ photo, options, onClose, onSaved }: CombinationPhotoEditDialogProps) => {
+const CombinationPhotoEditDialog = ({ photo, allPhotos, options, onClose, onSaved }: CombinationPhotoEditDialogProps) => {
   const flowerOptions = options.filter((option) => option.group === "flower");
   const fillerOptions = options.filter((option) => option.group === "filler");
   const paletteOptions = options.filter((option) => option.group === "palette");
@@ -283,7 +297,17 @@ const CombinationPhotoEditDialog = ({ photo, options, onClose, onSaved }: Combin
   const [fillers, setFillers] = useState<string[]>(photo.selection.fillers);
   const [palette, setPalette] = useState(photo.selection.palette);
   const [error, setError] = useState<string | null>(null);
+  // Set when the chosen bouquet already has a photo; the admin then picks swap or replace.
+  const [isTaken, setIsTaken] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const flowersToSave = () => rows.map((row) => ({ code: row.code, color: row.color, quantity: Number(row.quantity) }));
+  const existing = isTaken
+    ? allPhotos.find(
+        (entry) => entry.key !== photo.key
+          && bouquetSignature(entry.selection) === bouquetSignature({ flowers: flowersToSave(), fillers, palette })
+      )
+    : undefined;
 
   const colorsOf = (code: string) => flowerOptions.find((option) => option.code === code)?.colorChoices ?? [];
 
@@ -310,21 +334,30 @@ const CombinationPhotoEditDialog = ({ photo, options, onClose, onSaved }: Combin
   const toggleFiller = (code: string) =>
     setFillers((current) => (current.includes(code) ? current.filter((entry) => entry !== code) : [...current, code]));
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const flowers = rows.map((row) => ({ code: row.code, color: row.color, quantity: Number(row.quantity) }));
+  const save = async (onConflict?: "swap" | "replace") => {
+    const flowers = flowersToSave();
     if (flowers.some((flower) => !Number.isInteger(flower.quantity) || flower.quantity < 1)) {
       setError("Each flower needs a whole number of stems, at least 1.");
       return;
     }
     setError(null);
+    setIsTaken(false);
     setIsSaving(true);
     try {
-      onSaved(await updateCombinationPhoto(photo.key, { flowers, fillers, palette }));
+      onSaved(await updateCombinationPhoto(photo.key, { flowers, fillers, palette }, onConflict), onConflict !== undefined);
     } catch (saveError) {
-      setError(errorMessage(saveError));
+      if (saveError instanceof ApiError && saveError.status === 409) {
+        setIsTaken(true);
+      } else {
+        setError(errorMessage(saveError));
+      }
       setIsSaving(false);
     }
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void save();
   };
 
   return (
@@ -382,15 +415,17 @@ const CombinationPhotoEditDialog = ({ photo, options, onClose, onSaved }: Combin
           ) : null}
         </fieldset>
 
-        <fieldset className="admin-product-field">
+        <fieldset className="admin-product-field admin-builder-colors">
           <legend className="admin-product-label">Fillers</legend>
           {fillerOptions.length === 0 ? <span className="admin-product-hint">No fillers are set up yet.</span> : null}
-          {fillerOptions.map((option) => (
-            <label key={option.code} className="admin-builder-color-default">
-              <input type="checkbox" checked={fillers.includes(option.code)} onChange={() => toggleFiller(option.code)} />
-              {option.name}
-            </label>
-          ))}
+          <div className="admin-builder-filler-list">
+            {fillerOptions.map((option) => (
+              <label key={option.code}>
+                <input type="checkbox" checked={fillers.includes(option.code)} onChange={() => toggleFiller(option.code)} />
+                {option.name}
+              </label>
+            ))}
+          </div>
           <span className="admin-product-hint">Leave all unchecked for a bouquet without filler flowers.</span>
         </fieldset>
 
@@ -402,6 +437,30 @@ const CombinationPhotoEditDialog = ({ photo, options, onClose, onSaved }: Combin
         </label>
 
         {error ? <span className="admin-product-error" role="alert">{error}</span> : null}
+
+        {isTaken ? (
+          <div className="admin-product-field" role="alert">
+            <span className="admin-product-label">Another photo already shows for this bouquet</span>
+            {existing ? (
+              <img
+                src={resolveImagePath(existing.image, 240)}
+                alt="The photo already used for this bouquet"
+                style={{ width: 120, aspectRatio: "1 / 1", objectFit: "contain", borderRadius: 10, border: "1px solid #f6e1df" }}
+              />
+            ) : null}
+            <span className="admin-product-hint">
+              Swap: the two photos trade bouquets, so nothing is lost. Replace: this photo takes over and the other one is removed.
+            </span>
+            <div className="admin-builder-option-actions">
+              <button type="button" className="admin-products-secondary" onClick={() => void save("swap")} disabled={isSaving}>
+                Swap the two photos
+              </button>
+              <button type="button" className="admin-ui-link-button is-danger" onClick={() => void save("replace")} disabled={isSaving}>
+                Replace the other photo
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </AdminDialog>
   );

@@ -34,6 +34,11 @@ interface AvailableCountRow extends RowDataPacket {
   available_in_group: number;
 }
 
+interface PhotoImageRow extends RowDataPacket {
+  image_url: string;
+  source_path: string;
+}
+
 interface CodeRow extends RowDataPacket {
   code: string;
 }
@@ -367,19 +372,55 @@ adminContentRouter.patch("/combination-photos/:key", async (req, res) => {
     palette: pick("palette", body.palette, "Color palette").code
   };
 
+  // When another photo already shows for the chosen bouquet, the admin decides: "swap" trades the two photos'
+  // bouquets, "replace" removes the other photo. Without a choice the request is refused (409).
+  const onConflict = requireOneOf(body.onConflict ?? "none", "Conflict choice", ["none", "swap", "replace"] as const);
+
   const newKey = combinationKey(selection);
-  if (newKey !== key) {
-    const [taken] = await pool.query<RowDataPacket[]>("SELECT combination_key FROM builder_combination_photos WHERE combination_key = ?", [newKey]);
-    if (taken.length > 0) {
-      throw new HttpError(409, "Another photo is already used for that bouquet. Remove or change that one first.");
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [[current]] = await connection.query<PhotoImageRow[]>(
+      "SELECT image_url, source_path FROM builder_combination_photos WHERE combination_key = ? FOR UPDATE",
+      [key]
+    );
+    if (!current) {
+      throw new HttpError(404, "Combination photo not found");
     }
-  }
-  const [result] = await pool.query<ResultSetHeader>(
-    "UPDATE builder_combination_photos SET combination_key = ?, selection = ? WHERE combination_key = ?",
-    [newKey, JSON.stringify(selection), key]
-  );
-  if (result.affectedRows === 0) {
-    throw new HttpError(404, "Combination photo not found");
+
+    if (newKey === key) {
+      await connection.query("UPDATE builder_combination_photos SET selection = ? WHERE combination_key = ?", [JSON.stringify(selection), key]);
+    } else {
+      const [[other]] = await connection.query<PhotoImageRow[]>(
+        "SELECT image_url, source_path FROM builder_combination_photos WHERE combination_key = ? FOR UPDATE",
+        [newKey]
+      );
+      if (!other) {
+        await connection.query(
+          "UPDATE builder_combination_photos SET combination_key = ?, selection = ? WHERE combination_key = ?",
+          [newKey, JSON.stringify(selection), key]
+        );
+      } else if (onConflict === "replace") {
+        await connection.query("DELETE FROM builder_combination_photos WHERE combination_key = ?", [newKey]);
+        await connection.query(
+          "UPDATE builder_combination_photos SET combination_key = ?, selection = ? WHERE combination_key = ?",
+          [newKey, JSON.stringify(selection), key]
+        );
+      } else if (onConflict === "swap") {
+        // Each bouquet keeps its row; the two images (and where they came from) trade places.
+        const swap = "UPDATE builder_combination_photos SET image_url = ?, source_path = ? WHERE combination_key = ?";
+        await connection.query(swap, [other.image_url, other.source_path, key]);
+        await connection.query(swap, [current.image_url, current.source_path, newKey]);
+      } else {
+        throw new HttpError(409, "Another photo already shows for that bouquet.");
+      }
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
   res.json({ key: newKey, selection });
 });

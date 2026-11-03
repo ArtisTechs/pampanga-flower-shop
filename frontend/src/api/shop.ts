@@ -238,10 +238,16 @@ export const replaceCombinationPhoto = async (key: string, file: File) =>
   (await apiRequest<{ image: string }>(`/admin/combination-photos/${encodeURIComponent(key)}/image`, { method: "PUT", body: file })).image;
 
 // Changes which bouquet the photo is for. The key changes with the choices, so the server returns the new one.
-export const updateCombinationPhoto = (key: string, selection: CombinationPhotoSelection) =>
+// If another photo already shows for that bouquet the server answers 409, unless onConflict says what to do:
+// "swap" trades the two photos' bouquets, "replace" removes the other photo.
+export const updateCombinationPhoto = (
+  key: string,
+  selection: CombinationPhotoSelection,
+  onConflict?: "swap" | "replace"
+) =>
   apiRequest<{ key: string; selection: CombinationPhotoSelection }>(`/admin/combination-photos/${encodeURIComponent(key)}`, {
     method: "PATCH",
-    body: selection
+    body: { ...selection, onConflict }
   });
 
 export const deleteCombinationPhoto = (key: string) =>
