@@ -9,6 +9,8 @@ export interface StockNeed {
   name: string;
   unit: string;
   quantity: number;
+  /** Customizer flowers: the color taken; its own count goes down along with the flower's total. */
+  color?: string;
 }
 
 interface StockLeftRow extends RowDataPacket {
@@ -26,7 +28,7 @@ const STOCK_TABLES = {
 export const reserveStock = async (connection: PoolConnection, orderId: string, needs: StockNeed[]) => {
   const merged = new Map<string, StockNeed>();
   for (const need of needs) {
-    const key = `${need.source}:${need.id}`;
+    const key = `${need.source}:${need.id}:${need.color ?? ""}`;
     const existing = merged.get(key);
     merged.set(key, existing ? { ...existing, quantity: existing.quantity + need.quantity } : { ...need });
   }
@@ -34,6 +36,31 @@ export const reserveStock = async (connection: PoolConnection, orderId: string, 
   const sorted = [...merged.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, need]) => need);
   for (const need of sorted) {
     const { table, column } = STOCK_TABLES[need.source];
+    if (need.color) {
+      const [colorResult] = await connection.query<ResultSetHeader>(
+        `UPDATE inventory_color_stock SET current_stock = current_stock - ?
+         WHERE inventory_item_id = ? AND color_name = ? AND current_stock >= ?`,
+        [need.quantity, need.id, need.color, need.quantity]
+      );
+      if (colorResult.affectedRows === 0) {
+        const [[row]] = await connection.query<StockLeftRow[]>(
+          "SELECT current_stock AS stock FROM inventory_color_stock WHERE inventory_item_id = ? AND color_name = ?",
+          [need.id, need.color]
+        );
+        const left = row?.stock ?? 0;
+        const label = `${need.color} ${need.name}`;
+        throw new HttpError(
+          409,
+          left > 0 ? `Only ${left} ${need.unit} of ${label} left. Please lower the quantity.` : `${label} is sold out.`
+        );
+      }
+      // The item's total is the sum of its colors.
+      await connection.query(
+        `UPDATE ${table} SET ${column} = ${column} - LEAST(${column}, ?) WHERE id = ?`,
+        [need.quantity, need.id]
+      );
+      continue;
+    }
     const [result] = await connection.query<ResultSetHeader>(
       `UPDATE ${table} SET ${column} = ${column} - ? WHERE id = ? AND ${column} >= ?`,
       [need.quantity, need.id, need.quantity]
@@ -50,8 +77,10 @@ export const reserveStock = async (connection: PoolConnection, orderId: string, 
 
   if (sorted.length > 0) {
     await connection.query(
-      "INSERT INTO order_stock (order_id, inventory_item_id, product_id, quantity) VALUES ?",
-      [sorted.map((need) => [orderId, need.source === "inventory" ? need.id : null, need.source === "product" ? need.id : null, need.quantity])]
+      "INSERT INTO order_stock (order_id, inventory_item_id, product_id, color_name, quantity) VALUES ?",
+      [sorted.map((need) => [
+        orderId, need.source === "inventory" ? need.id : null, need.source === "product" ? need.id : null, need.color ?? null, need.quantity
+      ])]
     );
   }
 };
@@ -88,7 +117,35 @@ export const cancelOrderWith = async (
       [orderId]
     );
   }
+  await connection.query(
+    `UPDATE inventory_color_stock c
+     JOIN (SELECT inventory_item_id AS item_id, color_name, SUM(quantity) AS quantity FROM order_stock
+           WHERE order_id = ? AND inventory_item_id IS NOT NULL AND color_name IS NOT NULL
+           GROUP BY inventory_item_id, color_name) s ON s.item_id = c.inventory_item_id AND s.color_name = c.color_name
+     SET c.current_stock = c.current_stock + s.quantity`,
+    [orderId]
+  );
   return true;
+};
+
+// Keeps an item's per-color rows in line with the colors its flower has now: new colors start at 0, removed colors
+// drop out, and the item's total becomes the sum of what is left. A flower with no colors isn't tracked per color.
+export const syncColorStock = async (executor: Pick<PoolConnection, "query">, inventoryItemId: string, colorNames: string[]) => {
+  if (colorNames.length === 0) {
+    await executor.query("DELETE FROM inventory_color_stock WHERE inventory_item_id = ?", [inventoryItemId]);
+    return;
+  }
+  await executor.query(
+    "INSERT IGNORE INTO inventory_color_stock (inventory_item_id, color_name, current_stock) VALUES ?",
+    [colorNames.map((name) => [inventoryItemId, name, 0])]
+  );
+  await executor.query("DELETE FROM inventory_color_stock WHERE inventory_item_id = ? AND color_name NOT IN (?)", [inventoryItemId, colorNames]);
+  await executor.query(
+    `UPDATE inventory_items
+     SET current_stock = (SELECT COALESCE(SUM(current_stock), 0) FROM inventory_color_stock WHERE inventory_item_id = ?)
+     WHERE id = ?`,
+    [inventoryItemId, inventoryItemId]
+  );
 };
 
 export const withTransaction = async <T>(work: (connection: PoolConnection) => Promise<T>) => {

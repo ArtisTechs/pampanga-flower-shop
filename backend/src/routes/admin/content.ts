@@ -14,6 +14,7 @@ import {
   type FlowerColor
 } from "../../db/builder.js";
 import { pool } from "../../db/pool.js";
+import { syncColorStock, withTransaction } from "../../db/stock.js";
 import { SITE_CONTENT_FIELDS, SITE_CONTENT_KEYS, saveSiteContent, type SiteContent } from "../../db/siteContent.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { isCloudinaryImageUrl, uploadImage } from "../../services/cloudinary.js";
@@ -229,8 +230,7 @@ adminContentRouter.post("/builder-options", async (req, res) => {
       fields.imageUrl, fields.available, fields.isDefault, group
     ]
   );
-  // New flowers and fillers start with no stock; the admin adds it on the Inventory page. A row left over from a
-  // deleted option with the same code is linked again, keeping its stock.
+  // New flowers and fillers start with no stock (flowers: none in any color); the admin adds it on the Inventory page.
   if (STOCKED_GROUPS.includes(group)) {
     await pool.query(
       `INSERT INTO inventory_items (id, kind, builder_option_id, name, description, current_stock, threshold, capacity, unit, sort_order)
@@ -238,6 +238,9 @@ adminContentRouter.post("/builder-options", async (req, res) => {
        ON DUPLICATE KEY UPDATE builder_option_id = VALUES(builder_option_id), name = VALUES(name)`,
       [id, id, fields.name, fields.description, group === "filler" ? "bunches" : "stems"]
     );
+    if (group === "flower") {
+      await syncColorStock(pool, id, (fields.colorChoices ?? []).map((color) => color.name));
+    }
   }
   res.status(201).json(await findOption(id));
 });
@@ -267,14 +270,21 @@ adminContentRouter.patch("/builder-options/:id", async (req, res) => {
       fields.imageUrl, fields.available, fields.isDefault, id
     ]
   );
+  if (option.group === "flower" && option.inventoryItemId) {
+    await syncColorStock(pool, option.inventoryItemId, (fields.colorChoices ?? []).map((color) => color.name));
+  }
   res.json(await findOption(id));
 });
 
-// Orders keep their own copies of option names, so removing an option doesn't change past orders.
+// Orders keep their own copies of option names, so removing an option doesn't change past orders. A flower's or
+// filler's inventory row goes with it (its color rows too); orders that took from it just lose the link.
 adminContentRouter.delete("/builder-options/:id", async (req, res) => {
   const option = await findOption(requireId(req.params.id, "option"));
   await ensureAnotherAvailable(option, "This is the last option customers can pick in this group. Add or show another one first.");
-  await pool.query("DELETE FROM builder_options WHERE id = ?", [option.id]);
+  await withTransaction(async (connection) => {
+    await connection.query("DELETE FROM builder_options WHERE id = ?", [option.id]);
+    await connection.query("DELETE FROM inventory_items WHERE kind = 'flower' AND (id = ? OR builder_option_id = ?)", [option.inventoryItemId ?? option.id, option.id]);
+  });
   res.status(204).end();
 });
 

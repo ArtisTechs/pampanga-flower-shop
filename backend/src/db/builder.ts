@@ -70,6 +70,14 @@ export interface BuilderOption {
   inventoryItemId: string | null;
   stock: number | null;
   stockUnit: string | null;
+  /** Flowers: units left per color name; empty when the flower isn't tracked per color. */
+  colorStock: Record<string, number>;
+}
+
+interface ColorStockRow extends RowDataPacket {
+  inventory_item_id: string;
+  color_name: string;
+  current_stock: number;
 }
 
 export const loadBuilderOptions = async (availableOnly: boolean): Promise<BuilderOption[]> => {
@@ -81,6 +89,13 @@ export const loadBuilderOptions = async (availableOnly: boolean): Promise<Builde
      ${availableOnly ? "WHERE b.is_available = TRUE" : ""}
      ORDER BY FIELD(b.option_group, 'size', 'flower', 'filler', 'palette', 'wrap', 'ribbon'), b.sort_order`
   );
+  const [colorRows] = await pool.query<ColorStockRow[]>(
+    "SELECT inventory_item_id, color_name, current_stock FROM inventory_color_stock"
+  );
+  const colorStock = new Map<string, Record<string, number>>();
+  for (const row of colorRows) {
+    colorStock.set(row.inventory_item_id, { ...colorStock.get(row.inventory_item_id), [row.color_name]: row.current_stock });
+  }
   return rows.map((row) => ({
     id: row.id,
     group: row.option_group,
@@ -95,7 +110,8 @@ export const loadBuilderOptions = async (availableOnly: boolean): Promise<Builde
     isDefault: Boolean(row.is_default),
     inventoryItemId: row.inventory_item_id,
     stock: row.stock,
-    stockUnit: row.stock_unit
+    stockUnit: row.stock_unit,
+    colorStock: (row.inventory_item_id && colorStock.get(row.inventory_item_id)) || {}
   }));
 };
 

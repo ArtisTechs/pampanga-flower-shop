@@ -113,6 +113,8 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
   const totalFlowerCount = selectedFlowers.reduce((total, flower) => total + flowerCounts[flower.id], 0);
   const flowerColorOf = (flower: BuilderOption) =>
     flower.colorChoices.find((color) => color.name === flowerColors[flower.id]) ?? null;
+  // Stems left of the picked color (flowers counted per color), else of the flower as a whole.
+  const flowerStockOf = (flower: BuilderOption) => flowerColorOf(flower)?.stock ?? flower.stock;
   const totalPrice = useMemo(
     () => selectedSizeOption.pricePhp + selectedPaletteOption.pricePhp + selectedWrapOption.pricePhp + selectedRibbonOption.pricePhp
       + selectedFlowers.reduce((total, flower) => total + flower.pricePhp * flowerCounts[flower.id], 0)
@@ -217,7 +219,10 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
   const isPreviewLoading = step === "preview" && (!currentPreview || currentPreview.status === "loading");
   const previewImage = currentPreview?.image ?? stockPreviewImage;
 
-  const stemsLeft = (flowerId: string) => stockLimit(flowers.find((flower) => flower.id === flowerId)?.stock);
+  const stemsLeft = (flowerId: string) => {
+    const flower = flowers.find((entry) => entry.id === flowerId);
+    return stockLimit(flower && flowerStockOf(flower));
+  };
 
   const updateFlowerCount = (flowerId: string, amount: number) => {
     setFlowerCounts((currentCounts) => {
@@ -244,22 +249,26 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
 
   const handleSurpriseMe = () => {
     const nextCounts = Object.fromEntries(flowers.map((flower) => [flower.id, 0]));
-    const shuffledFlowers = flowers.filter((flower) => !isSoldOut(flower.stock)).sort(() => Math.random() - 0.5).slice(0, 3);
+    // Each flower gets a random color that is still in stock.
+    const nextColors = Object.fromEntries(flowers.map((flower) => {
+      const inStock = flower.colorChoices.filter((color) => !isSoldOut(color.stock));
+      return [flower.id, flower.colorChoices.length > 0 ? choiceFrom(inStock.length > 0 ? inStock : flower.colorChoices) : null];
+    }));
+    const stockOfPick = (flower: BuilderOption) => nextColors[flower.id]?.stock ?? flower.stock;
+    const shuffledFlowers = flowers.filter((flower) => !isSoldOut(stockOfPick(flower))).sort(() => Math.random() - 0.5).slice(0, 3);
 
     shuffledFlowers.forEach((flower) => {
       const currentTotal = Object.values(nextCounts).reduce((total, count) => total + count, 0);
       const remainingSlots = maxFlowerCount - currentTotal;
 
       if (remainingSlots > 0) {
-        nextCounts[flower.id] = Math.min(Math.floor(Math.random() * 3) + 1, remainingSlots, stockLimit(flower.stock));
+        nextCounts[flower.id] = Math.min(Math.floor(Math.random() * 3) + 1, remainingSlots, stockLimit(stockOfPick(flower)));
       }
     });
 
     setSelectedSize(choiceFrom(bouquetSizes).id);
     setFlowerCounts(nextCounts);
-    setFlowerColors(Object.fromEntries(
-      flowers.map((flower) => [flower.id, flower.colorChoices.length > 0 ? choiceFrom(flower.colorChoices).name : ""])
-    ));
+    setFlowerColors(Object.fromEntries(flowers.map((flower) => [flower.id, nextColors[flower.id]?.name ?? ""])));
     setSelectedFillers(
       fillers.filter((filler) => !isSoldOut(filler.stock)).sort(() => Math.random() - 0.5)
         .slice(0, Math.floor(Math.random() * 3)).map((filler) => filler.id)
@@ -418,8 +427,8 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
               </div>
               <div className="flower-choice-grid">
                 {flowers.map((flower) => {
-                  const soldOut = isSoldOut(flower.stock);
-                  const stockText = stockLabel(flower.stock, flower.stockUnit ?? "stems");
+                  const soldOut = isSoldOut(flowerStockOf(flower));
+                  const stockText = stockLabel(flowerStockOf(flower), flower.stockUnit ?? "stems");
                   return (
                   <article
                     key={flower.id}
@@ -438,11 +447,16 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                         <select
                           className="flower-color-select"
                           value={flowerColors[flower.id]}
-                          onChange={(event) => setFlowerColors((current) => ({ ...current, [flower.id]: event.target.value }))}
+                          onChange={(event) => {
+                            const nextColor = flower.colorChoices.find((color) => color.name === event.target.value);
+                            setFlowerColors((current) => ({ ...current, [flower.id]: event.target.value }));
+                            // Fewer stems in the new color: keep only what is left of it.
+                            setFlowerCounts((current) => ({ ...current, [flower.id]: Math.min(current[flower.id], stockLimit(nextColor?.stock ?? flower.stock)) }));
+                          }}
                           aria-label={`${flower.name} color`}
                         >
                           {flower.colorChoices.map((color) => (
-                            <option key={color.name} value={color.name}>{color.name}</option>
+                            <option key={color.name} value={color.name}>{color.name}{isSoldOut(color.stock) ? " (sold out)" : ""}</option>
                           ))}
                         </select>
                       ) : null}
@@ -456,7 +470,7 @@ const CustomizeOrderForm = ({ config, onAddToCart, onToast }: CustomizeOrderForm
                         type="button"
                         onClick={() => updateFlowerCount(flower.id, 1)}
                         aria-label={`Add ${flower.name}`}
-                        disabled={totalFlowerCount >= maxFlowerCount || flowerCounts[flower.id] >= stockLimit(flower.stock)}
+                        disabled={totalFlowerCount >= maxFlowerCount || flowerCounts[flower.id] >= stockLimit(flowerStockOf(flower))}
                       >
                         +
                       </button>

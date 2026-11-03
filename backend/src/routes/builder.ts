@@ -11,14 +11,15 @@ import { currentUser, requireAuth } from "../middleware/auth.js";
 import { getOrCreatePreview } from "../services/bouquetPreview.js";
 import { bodyOf } from "../utils/validate.js";
 
-// stock: units left for flowers and fillers (null = not stock-limited); stockUnit e.g. "stems".
-const toClientOption = ({ code, name, description, pricePhp, colors, colorChoices, imageUrl, stock, stockUnit }: BuilderOption) => ({
+// stock: units left for flowers and fillers (null = not stock-limited); stockUnit e.g. "stems". Each flower color
+// carries its own stock (null when the flower isn't tracked per color).
+const toClientOption = ({ code, name, description, pricePhp, colors, colorChoices, imageUrl, stock, stockUnit, colorStock }: BuilderOption) => ({
   id: code,
   name,
   description,
   pricePhp,
   colors,
-  colorChoices,
+  colorChoices: colorChoices.map((color) => ({ ...color, stock: colorStock[color.name] ?? null })),
   imageUrl,
   stock,
   stockUnit

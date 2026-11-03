@@ -63,21 +63,26 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
     return [...filtered].sort(sorters[sortBy]);
   }, [activeTab, allItems, search, sortBy, stockFilter]);
 
-  const handleAdjust = async (item: InventoryItem, direction: 1 | -1) => {
-    const amount = Number(amounts[itemKey(item)] ?? "10");
+  // colorName: adjust one color of a flower that is counted per color.
+  const handleAdjust = async (item: InventoryItem, direction: 1 | -1, colorName?: string) => {
+    const rowKey = colorName ? `${itemKey(item)}:${colorName}` : itemKey(item);
+    const amount = Number(amounts[rowKey] ?? "10");
     if (!Number.isInteger(amount) || amount <= 0) {
       onToast("Enter a whole number above 0.", "error");
       return;
     }
 
-    setUpdatingItemId(itemKey(item));
+    setUpdatingItemId(rowKey);
     try {
-      const updatedItem = await adjustInventory(item, amount * direction);
+      const updatedItem = await adjustInventory(item, amount * direction, colorName);
       inventory.updateData((current) => current.map((entry) => (itemKey(entry) === itemKey(item) ? updatedItem : entry)));
       const capped = direction === 1 && item.kind !== "product"
         && updatedItem.inStock === updatedItem.capacity && item.inStock + amount > item.capacity;
+      const colorStock = updatedItem.colors?.find((color) => color.name === colorName)?.inStock;
       onToast(
-        `${updatedItem.name}: ${updatedItem.inStock} ${updatedItem.unit} in stock${capped ? " (storage is full)" : ""}.`,
+        colorName
+          ? `${colorName} ${updatedItem.name}: ${colorStock ?? 0} ${updatedItem.unit} in stock${capped ? " (storage is full)" : ""}.`
+          : `${updatedItem.name}: ${updatedItem.inStock} ${updatedItem.unit} in stock${capped ? " (storage is full)" : ""}.`,
         "success"
       );
     } catch (error) {
@@ -162,6 +167,51 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
                       <i style={{ left: `${Math.min(100, (item.threshold / item.capacity) * 100)}%` }} aria-hidden="true" />
                     </div>
                   </div>
+                  {item.colors ? (
+                    <ul className="admin-ui-color-stock" aria-label={`${item.name} stock by color`}>
+                      {item.colors.map((color) => {
+                        const colorKey = `${itemKey(item)}:${color.name}`;
+                        const colorUpdating = updatingItemId === colorKey;
+                        return (
+                          <li key={color.name}>
+                            <span className="admin-ui-color-name">
+                              <i style={{ backgroundColor: color.hex ?? "#d9d3d1" }} aria-hidden="true" />
+                              {color.name}
+                            </span>
+                            <strong>{color.inStock}</strong>
+                            <div className="admin-ui-adjust">
+                              <button
+                                type="button"
+                                onClick={() => handleAdjust(item, -1, color.name)}
+                                disabled={colorUpdating || color.inStock === 0}
+                                aria-label={`Remove stock from ${color.name} ${item.name}`}
+                              >
+                                <AdminUiIcon name="minus" />
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                inputMode="numeric"
+                                value={amounts[colorKey] ?? "10"}
+                                onChange={(event) => setAmounts((current) => ({ ...current, [colorKey]: event.target.value }))}
+                                aria-label={`Amount to adjust for ${color.name} ${item.name}`}
+                              />
+                              <button
+                                type="button"
+                                className="add"
+                                onClick={() => handleAdjust(item, 1, color.name)}
+                                disabled={colorUpdating || isFull(item)}
+                                aria-label={`Add stock to ${color.name} ${item.name}`}
+                              >
+                                <AdminUiIcon name="plus" />
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
                   <div className="admin-ui-adjust">
                     <button
                       type="button"
@@ -190,6 +240,7 @@ export const AdminInventoryPage = ({ account, onLogout, onToast }: AdminInventor
                       <AdminUiIcon name="plus" />
                     </button>
                   </div>
+                  )}
                 </li>
               );
             })}

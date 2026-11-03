@@ -68,13 +68,18 @@ const buildCustomLine = async (
   const flowerSummary = flowers.map(({ option, color, quantity: count }) => `${color.name} ${option.name} x${count}`).join(", ");
   const fillerSummary = fillers.length > 0 ? ` with ${fillers.map((filler) => filler.name).join(", ")}` : "";
   const selection = { size, palette, wrap, ribbon, flowers, fillers };
-  // Stems per bouquet times bouquets; each filler is one bunch per bouquet. Options without an inventory row
-  // aren't stock-limited.
+  // Stems per bouquet times bouquets, taken from the picked color when the flower is tracked per color; each filler
+  // is one bunch per bouquet. Options without an inventory row aren't stock-limited.
   const stock: StockNeed[] = [
-    ...flowers.map(({ option, quantity: count }) => ({ option, perBouquet: count })),
-    ...fillers.map((option) => ({ option, perBouquet: 1 }))
-  ].flatMap(({ option, perBouquet }) => option.inventoryItemId
-    ? [{ source: "inventory" as const, id: option.inventoryItemId, name: option.name, unit: option.stockUnit ?? "stems", quantity: perBouquet * quantity }]
+    ...flowers.map(({ option, color, quantity: count }) => ({
+      option, perBouquet: count, color: color.name in option.colorStock ? color.name : undefined
+    })),
+    ...fillers.map((option) => ({ option, perBouquet: 1, color: undefined }))
+  ].flatMap(({ option, perBouquet, color }) => option.inventoryItemId
+    ? [{
+        source: "inventory" as const, id: option.inventoryItemId, name: option.name, unit: option.stockUnit ?? "stems",
+        quantity: perBouquet * quantity, color
+      }]
     : []);
 
   return {

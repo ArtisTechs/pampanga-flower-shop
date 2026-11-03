@@ -179,6 +179,8 @@ export interface FlowerColor {
   name: string;
   hex: string;
   isDefault: boolean;
+  /** Customizer only: units left in this color; null/absent when it isn't counted per color. */
+  stock?: number | null;
 }
 
 export interface BuilderOption {
@@ -374,6 +376,8 @@ export interface InventoryItem {
   inStock: number;
   capacity: number;
   unit: string;
+  /** Flowers counted per color: units left of each (the flower's own count is their total). */
+  colors?: Array<{ name: string; hex: string | null; inStock: number }>;
 }
 
 export type AdminUserStatus = "Active" | "Disabled";

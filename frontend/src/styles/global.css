@@ -4536,6 +4536,44 @@ button.admin-builder-availability:disabled {
   -webkit-appearance: none;
 }
 
+/* Flower stock per color (inside an inventory row) */
+.admin-ui-inventory-list .admin-ui-color-stock {
+  grid-column: 2 / -1;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.admin-ui-inventory-list .admin-ui-color-stock li {
+  grid-template-columns: minmax(0, 1fr) 48px auto;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed #f0dedd;
+}
+.admin-ui-inventory-list .admin-ui-color-stock li:last-child {
+  border-bottom: 0;
+}
+.admin-ui-color-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 600;
+}
+.admin-ui-color-name i {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+@media (max-width: 760px) {
+  .admin-ui-inventory-list .admin-ui-color-stock {
+    grid-column: 1 / -1;
+  }
+}
+
 /* Users */
 .admin-ui-person {
   display: flex;
