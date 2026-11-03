@@ -6,6 +6,8 @@ import {
   listCombinationPhotos,
   listGeneratedPreviews,
   loadBuilderOptions,
+  loadBuilderPreviews,
+  maxFlowersOf,
   STOCKED_GROUPS,
   type BuilderGroup,
   type BuilderOption,
@@ -15,8 +17,9 @@ import { pool } from "../../db/pool.js";
 import { SITE_CONTENT_FIELDS, SITE_CONTENT_KEYS, saveSiteContent, type SiteContent } from "../../db/siteContent.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { isCloudinaryImageUrl, uploadImage } from "../../services/cloudinary.js";
+import { combinationKey, type CombinationSpec } from "../../utils/combinationKey.js";
 import { rawImageBody, requireUploadedImage } from "../../utils/images.js";
-import { bodyOf, isRecord, requireId, requireOneOf, requireString } from "../../utils/validate.js";
+import { bodyOf, isRecord, requireId, requireInt, requireOneOf, requireString } from "../../utils/validate.js";
 
 const MAX_OPTION_PRICE_PHP = 1_000_000;
 const MAX_SWATCHES = 6;
@@ -316,6 +319,69 @@ adminContentRouter.put("/combination-photos/:key/image", rawImageBody, async (re
     key
   ]);
   res.json({ key, image: url });
+});
+
+// Changes which bouquet the photo is for (flowers with color and count, fillers, palette). The choices must be ones the
+// customizer offers, and a combination can only have one photo.
+adminContentRouter.patch("/combination-photos/:key", async (req, res) => {
+  const key = requireCombinationKey(req.params.key);
+  const body = bodyOf(req);
+  const [options, previews] = await Promise.all([loadBuilderOptions(false), loadBuilderPreviews()]);
+  const maxFlowers = maxFlowersOf(previews);
+  const pick = (group: BuilderGroup, code: unknown, label: string) => {
+    const option = options.find((entry) => entry.group === group && entry.code === code);
+    if (!option) {
+      throw new HttpError(400, `${label} is not available`);
+    }
+    return option;
+  };
+
+  if (!Array.isArray(body.flowers) || body.flowers.length === 0) {
+    throw new HttpError(400, "Choose at least one flower");
+  }
+  // One entry per flower and color; repeats are added together.
+  const flowers = new Map<string, { code: string; color: string; quantity: number }>();
+  for (const entry of body.flowers) {
+    if (!isRecord(entry)) {
+      throw new HttpError(400, "Invalid flower selection");
+    }
+    const flower = pick("flower", entry.code, "Flower");
+    const color = flower.colorChoices.find((choice) => choice.name === entry.color);
+    if (!color) {
+      throw new HttpError(400, `${flower.name} isn't available in that color`);
+    }
+    const quantity = requireInt(entry.quantity, "Flower quantity", 1, maxFlowers);
+    const flowerKey = `${flower.code}|${color.name}`;
+    flowers.set(flowerKey, { code: flower.code, color: color.name, quantity: (flowers.get(flowerKey)?.quantity ?? 0) + quantity });
+  }
+  if ([...flowers.values()].reduce((total, flower) => total + flower.quantity, 0) > maxFlowers) {
+    throw new HttpError(400, `A bouquet can have at most ${maxFlowers} flowers`);
+  }
+  if (body.fillers !== undefined && !Array.isArray(body.fillers)) {
+    throw new HttpError(400, "Invalid filler selection");
+  }
+  const fillers = [...new Set((body.fillers ?? []) as unknown[])].map((code) => pick("filler", code, "Filler").code);
+  const selection: CombinationSpec = {
+    flowers: [...flowers.values()],
+    fillers,
+    palette: pick("palette", body.palette, "Color palette").code
+  };
+
+  const newKey = combinationKey(selection);
+  if (newKey !== key) {
+    const [taken] = await pool.query<RowDataPacket[]>("SELECT combination_key FROM builder_combination_photos WHERE combination_key = ?", [newKey]);
+    if (taken.length > 0) {
+      throw new HttpError(409, "Another photo is already used for that bouquet. Remove or change that one first.");
+    }
+  }
+  const [result] = await pool.query<ResultSetHeader>(
+    "UPDATE builder_combination_photos SET combination_key = ?, selection = ? WHERE combination_key = ?",
+    [newKey, JSON.stringify(selection), key]
+  );
+  if (result.affectedRows === 0) {
+    throw new HttpError(404, "Combination photo not found");
+  }
+  res.json({ key: newKey, selection });
 });
 
 // Removes the photo; customers choosing this combination get a generated preview again.

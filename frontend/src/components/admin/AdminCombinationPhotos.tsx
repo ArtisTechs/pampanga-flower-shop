@@ -1,7 +1,7 @@
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { errorMessage } from "../../api/client";
-import { deleteCombinationPhoto, replaceCombinationPhoto } from "../../api/shop";
-import type { AdminBuilderOption, CombinationPhoto } from "../../types/shop";
+import { deleteCombinationPhoto, replaceCombinationPhoto, updateCombinationPhoto } from "../../api/shop";
+import type { AdminBuilderOption, CombinationPhoto, CombinationPhotoSelection } from "../../types/shop";
 import { resolveImagePath } from "../../utils/assets";
 import { IMAGE_UPLOAD_TYPES, validateImageFile } from "../../utils/validation";
 import type { ToastTone } from "../AppToast";
@@ -9,6 +9,7 @@ import { LoadState } from "../LoadState";
 import { AdminDialog, AdminUiIcon as Icon } from "./AdminUi";
 
 const PAGE_SIZE = 48;
+const MAX_FLOWER_ROWS = 5;
 
 interface AdminCombinationPhotosProps {
   photos: {
@@ -21,14 +22,17 @@ interface AdminCombinationPhotosProps {
   onToast: (message: string, tone: ToastTone) => void;
 }
 
-// The shop's own photos of ready combinations: check them by flower, filler and palette, replace one that looks
-// wrong, or remove it so customers get a generated preview for that combination again.
+// The shop's own photos of ready combinations: check them by flower, filler and palette, change which bouquet a photo is
+// for, replace one that looks wrong, or remove it so customers get a generated preview for that combination again.
 export const AdminCombinationPhotos = ({ photos, options, onToast }: AdminCombinationPhotosProps) => {
   const [search, setSearch] = useState("");
   const [paletteFilter, setPaletteFilter] = useState("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [editing, setEditing] = useState<CombinationPhoto | null>(null);
   const [removing, setRemoving] = useState<CombinationPhoto | null>(null);
+  // The element at the end of the grid; scrolling it into view loads the next page.
+  const [sentinel, setSentinel] = useState<HTMLElement | null>(null);
 
   const palettes = options.filter((option) => option.group === "palette");
   const nameOf = (group: AdminBuilderOption["group"], code: string) =>
@@ -58,6 +62,24 @@ export const AdminCombinationPhotos = ({ photos, options, onToast }: AdminCombin
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos.data, options]);
+
+  // A new observer after every page makes the browser report the sentinel again, so a tall screen keeps loading
+  // until the grid fills it.
+  useEffect(() => {
+    if (!sentinel) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((count) => count + PAGE_SIZE);
+        }
+      },
+      { rootMargin: "600px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [sentinel, visibleCount]);
 
   if (!photos.data) {
     return <LoadState error={photos.error} onRetry={photos.reload} />;
@@ -109,6 +131,14 @@ export const AdminCombinationPhotos = ({ photos, options, onToast }: AdminCombin
     }
   };
 
+  const handleEdited = (photo: CombinationPhoto, saved: { key: string; selection: CombinationPhotoSelection }) => {
+    photos.updateData((current) =>
+      current.map((entry) => (entry.key === photo.key ? { ...entry, key: saved.key, selection: saved.selection } : entry))
+    );
+    setEditing(null);
+    onToast("Photo updated. It now shows for the bouquet you chose.", "success");
+  };
+
   return (
     <section className="admin-ui-panel" aria-label="Combination photos">
       <div className="admin-products-toolbar admin-ui-toolbar-2">
@@ -155,6 +185,9 @@ export const AdminCombinationPhotos = ({ photos, options, onToast }: AdminCombin
                 <span>Filler: {filler}</span>
                 <span>Palette: {palette}</span>
                 <div className="admin-builder-option-actions">
+                  <button type="button" className="admin-ui-link-button" onClick={() => setEditing(photo)} disabled={isBusy}>
+                    Edit
+                  </button>
                   <label className="admin-ui-link-button" aria-disabled={isBusy}>
                     {isBusy ? "Working..." : "Replace"}
                     <input
@@ -176,17 +209,24 @@ export const AdminCombinationPhotos = ({ photos, options, onToast }: AdminCombin
       )}
 
       {matching.length > visibleCount ? (
-        <p className="admin-ui-panel-note">
-          Showing {visibleCount} of {matching.length}.{" "}
-          <button type="button" className="admin-ui-link-button" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
-            Show more
-          </button>
-        </p>
+        <p className="admin-ui-panel-note" ref={setSentinel}>Loading more photos...</p>
+      ) : matching.length > 0 ? (
+        <p className="admin-ui-panel-note">Showing all {matching.length} photos.</p>
       ) : null}
       <p className="admin-ui-panel-note">
         These are the shop's own photos for Korean wrap with a satin ribbon. Customers see the one that matches their flowers, filler and
-        palette; anything else is generated with AI. Replace a photo that doesn't look right, or remove it to go back to AI for that bouquet.
+        palette; anything else is generated with AI. Edit a photo to change which bouquet it's for, replace one that doesn't look right,
+        or remove it to go back to AI for that bouquet.
       </p>
+
+      {editing ? (
+        <CombinationPhotoEditDialog
+          photo={editing}
+          options={options}
+          onClose={() => setEditing(null)}
+          onSaved={(saved) => handleEdited(editing, saved)}
+        />
+      ) : null}
 
       {removing ? (
         <AdminDialog
@@ -215,5 +255,154 @@ export const AdminCombinationPhotos = ({ photos, options, onToast }: AdminCombin
         </AdminDialog>
       ) : null}
     </section>
+  );
+};
+
+interface FlowerRow {
+  code: string;
+  color: string;
+  quantity: string;
+}
+
+interface CombinationPhotoEditDialogProps {
+  photo: CombinationPhoto;
+  options: AdminBuilderOption[];
+  onClose: () => void;
+  onSaved: (saved: { key: string; selection: CombinationPhotoSelection }) => void;
+}
+
+// Which bouquet the photo is for: its flowers (each with a color and count), fillers and color palette.
+const CombinationPhotoEditDialog = ({ photo, options, onClose, onSaved }: CombinationPhotoEditDialogProps) => {
+  const flowerOptions = options.filter((option) => option.group === "flower");
+  const fillerOptions = options.filter((option) => option.group === "filler");
+  const paletteOptions = options.filter((option) => option.group === "palette");
+
+  const [rows, setRows] = useState<FlowerRow[]>(
+    photo.selection.flowers.map(({ code, color, quantity }) => ({ code, color, quantity: String(quantity) }))
+  );
+  const [fillers, setFillers] = useState<string[]>(photo.selection.fillers);
+  const [palette, setPalette] = useState(photo.selection.palette);
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const colorsOf = (code: string) => flowerOptions.find((option) => option.code === code)?.colorChoices ?? [];
+
+  const updateRow = (index: number, changes: Partial<FlowerRow>) =>
+    setRows((current) => current.map((row, position) => (position === index ? { ...row, ...changes } : row)));
+
+  // A different flower starts on its default color, since the old color may not exist for it.
+  const changeFlower = (index: number, code: string) => {
+    const colors = colorsOf(code);
+    updateRow(index, { code, color: (colors.find((color) => color.isDefault) ?? colors[0])?.name ?? "" });
+  };
+
+  const addRow = () => {
+    const first = flowerOptions[0];
+    if (first) {
+      const colors = first.colorChoices;
+      setRows((current) => [
+        ...current,
+        { code: first.code, color: (colors.find((color) => color.isDefault) ?? colors[0])?.name ?? "", quantity: "1" }
+      ]);
+    }
+  };
+
+  const toggleFiller = (code: string) =>
+    setFillers((current) => (current.includes(code) ? current.filter((entry) => entry !== code) : [...current, code]));
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const flowers = rows.map((row) => ({ code: row.code, color: row.color, quantity: Number(row.quantity) }));
+    if (flowers.some((flower) => !Number.isInteger(flower.quantity) || flower.quantity < 1)) {
+      setError("Each flower needs a whole number of stems, at least 1.");
+      return;
+    }
+    setError(null);
+    setIsSaving(true);
+    try {
+      onSaved(await updateCombinationPhoto(photo.key, { flowers, fillers, palette }));
+    } catch (saveError) {
+      setError(errorMessage(saveError));
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <AdminDialog
+      title="Edit this photo's bouquet"
+      subtitle="Choose the bouquet customers see this photo for."
+      onClose={onClose}
+      isBusy={isSaving}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <button type="button" className="admin-products-secondary" onClick={onClose} disabled={isSaving}>Cancel</button>
+          <button type="submit" className="admin-products-primary" disabled={isSaving}>{isSaving ? "Saving..." : "Save changes"}</button>
+        </>
+      }
+    >
+      <div className="admin-builder-form">
+        <fieldset className="admin-product-field admin-builder-colors admin-builder-flower-rows">
+          <legend className="admin-product-label">Flowers <em>*</em></legend>
+          <ul>
+            {rows.map((row, index) => (
+              <li key={index}>
+                <select value={row.code} onChange={(event) => changeFlower(index, event.target.value)} aria-label={`Flower ${index + 1}`}>
+                  {flowerOptions.map((option) => <option key={option.code} value={option.code}>{option.name}</option>)}
+                </select>
+                <select value={row.color} onChange={(event) => updateRow(index, { color: event.target.value })} aria-label={`Color of flower ${index + 1}`}>
+                  {colorsOf(row.code).map((color) => <option key={color.name} value={color.name}>{color.name}</option>)}
+                </select>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  value={row.quantity}
+                  onChange={(event) => updateRow(index, { quantity: event.target.value })}
+                  aria-label={`Stems of flower ${index + 1}`}
+                />
+                <button
+                  type="button"
+                  className="admin-ui-link-button is-danger"
+                  onClick={() => setRows((current) => current.filter((_, position) => position !== index))}
+                  disabled={rows.length === 1}
+                  aria-label={`Remove flower ${index + 1}`}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+          {rows.length < MAX_FLOWER_ROWS ? (
+            <button type="button" className="admin-ui-link-button" onClick={addRow}>
+              <Icon name="plus" />
+              Add another flower
+            </button>
+          ) : null}
+        </fieldset>
+
+        <fieldset className="admin-product-field">
+          <legend className="admin-product-label">Fillers</legend>
+          {fillerOptions.length === 0 ? <span className="admin-product-hint">No fillers are set up yet.</span> : null}
+          {fillerOptions.map((option) => (
+            <label key={option.code} className="admin-builder-color-default">
+              <input type="checkbox" checked={fillers.includes(option.code)} onChange={() => toggleFiller(option.code)} />
+              {option.name}
+            </label>
+          ))}
+          <span className="admin-product-hint">Leave all unchecked for a bouquet without filler flowers.</span>
+        </fieldset>
+
+        <label className="admin-product-field">
+          <span className="admin-product-label">Color palette <em>*</em></span>
+          <select value={palette} onChange={(event) => setPalette(event.target.value)}>
+            {paletteOptions.map((option) => <option key={option.code} value={option.code}>{option.name}</option>)}
+          </select>
+        </label>
+
+        {error ? <span className="admin-product-error" role="alert">{error}</span> : null}
+      </div>
+    </AdminDialog>
   );
 };

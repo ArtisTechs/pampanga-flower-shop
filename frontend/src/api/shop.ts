@@ -19,6 +19,7 @@ import type {
   CustomerOrder,
   CustomerOrderDetail,
   CombinationPhoto,
+  CombinationPhotoSelection,
   GeneratedBouquetPreview,
   HomeContent,
   InventoryItem,
@@ -235,6 +236,13 @@ export const fetchCombinationPhotos = () => apiRequest<CombinationPhoto[]>("/adm
 // Replaces the photo (JPG, PNG, or WebP, max 3 MB); returns the new image URL.
 export const replaceCombinationPhoto = async (key: string, file: File) =>
   (await apiRequest<{ image: string }>(`/admin/combination-photos/${encodeURIComponent(key)}/image`, { method: "PUT", body: file })).image;
+
+// Changes which bouquet the photo is for. The key changes with the choices, so the server returns the new one.
+export const updateCombinationPhoto = (key: string, selection: CombinationPhotoSelection) =>
+  apiRequest<{ key: string; selection: CombinationPhotoSelection }>(`/admin/combination-photos/${encodeURIComponent(key)}`, {
+    method: "PATCH",
+    body: selection
+  });
 
 export const deleteCombinationPhoto = (key: string) =>
   apiRequest<void>(`/admin/combination-photos/${encodeURIComponent(key)}`, { method: "DELETE" });

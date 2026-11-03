@@ -5595,6 +5595,19 @@ button.admin-builder-availability:disabled {
   }
 }
 
+/* Combination photo editor: flower, color and stem count on one row. */
+.admin-builder-flower-rows li {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 72px auto;
+}
+@media (max-width: 640px) {
+  .admin-builder-flower-rows li {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 72px;
+  }
+  .admin-builder-flower-rows li > .admin-ui-link-button {
+    grid-column: 1 / -1;
+  }
+}
+
 /* Stock: shown on products, the cart and the customizer's flowers and fillers. */
 .stock-note { display: block; margin: 2px 0 0; color: #6c6463; font-size: 0.74rem; font-weight: 700; }
 .stock-note.sold-out { color: #b42323; }
