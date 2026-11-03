@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router";
 import type { Account, NavItem } from "../types/shop";
-import { resolveImagePath } from "../utils/assets";
+import { publicAssetPath, resolveImagePath } from "../utils/assets";
 
 interface SiteHeaderProps {
   shopName: string;
@@ -141,7 +141,7 @@ export const SiteHeader = ({
   return (
     <nav className={`navbar ${showShadow ? "scrolled" : ""}`}>
       <div className="nav-container">
-        <NavLink to="/" className="logo">{shopName}</NavLink>
+        <NavLink to="/" className="logo"><img className="logo-mark" src={publicAssetPath("images/site/logo.png")} alt="" />{shopName}</NavLink>
         <ul className="nav-menu" ref={navMenuRef}>
           {items.map((item) => {
             const childItems = item.children ?? [];

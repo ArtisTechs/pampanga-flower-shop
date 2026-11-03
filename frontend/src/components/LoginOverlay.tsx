@@ -1,3 +1,4 @@
+import { publicAssetPath } from "../utils/assets";
 import { FormEvent, useEffect, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { NavLink } from "react-router";
 import { ApiError, errorMessage } from "../api/client";
@@ -289,7 +290,7 @@ export const LoginOverlay = ({ shopName, onLogin, onRegister, onResetPassword, o
     <div className="login-overlay" role="dialog" aria-modal="true" aria-label={TITLES[authMode]}>
       <header className="login-topbar">
         <div className="login-topbar-inner">
-          <NavLink to="/" className="logo">{shopName}</NavLink>
+          <NavLink to="/" className="logo"><img className="logo-mark" src={publicAssetPath("images/site/logo.png")} alt="" />{shopName}</NavLink>
           <nav aria-label="Guest navigation">
             <ul className="nav-menu">
               <li><NavLink to="/#home" className="nav-link">Home</NavLink></li>

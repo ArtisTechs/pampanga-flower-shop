@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Account } from "../../types/shop";
 import { AdminIcon } from "./AdminIcon";
 import { adminNavItems } from "./adminNavigation";
+import { publicAssetPath } from "../../utils/assets";
 
 interface AdminLayoutProps {
   account: Account;
@@ -57,7 +58,7 @@ export const AdminLayout = ({ account, children, onLogout }: AdminLayoutProps) =
           >
             <AdminIcon icon="menu" />
           </button>
-          <NavLink className="admin-brand" to="/admin/dashboard">Admin</NavLink>
+          <NavLink className="admin-brand" to="/admin/dashboard"><img className="logo-mark" src={publicAssetPath("images/site/logo.png")} alt="" />Admin</NavLink>
         </div>
         <div className="admin-profile" ref={profileMenuRef}>
           <button
